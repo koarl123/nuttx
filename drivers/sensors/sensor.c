@@ -521,6 +521,11 @@ static int sensor_open(FAR struct file *filep)
       ret = -ENOMEM;
       goto errout_with_lock;
     }
+  user->state.interval = ULONG_MAX;
+  user->state.esize = upper->state.esize;
+  nxsem_init(&user->buffersem, 0, 0);
+  list_add_tail(&upper->userlist, &user->node);
+
 
   if (lower->ops->open)
     {
@@ -565,11 +570,6 @@ static int sensor_open(FAR struct file *filep)
       user->bufferpos  = upper->timing.head / TIMING_BUF_ESIZE;
     }
 
-  user->state.interval = ULONG_MAX;
-  user->state.esize = upper->state.esize;
-  nxsem_init(&user->buffersem, 0, 0);
-  list_add_tail(&upper->userlist, &user->node);
-
   /* The new user generation, notify to other users */
 
   sensor_pollnotify(upper, POLLPRI);
@@ -582,6 +582,8 @@ errout_with_open:
     {
       lower->ops->close(lower, filep);
     }
+  nxsem_destroy(&user->buffersem);
+  list_delete(&user->node);
 
 errout_with_user:
   kmm_free(user);

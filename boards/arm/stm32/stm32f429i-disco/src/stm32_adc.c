@@ -61,7 +61,7 @@
 
 /* TODO DMA */
 
-#define ADC1_NCHANNELS 2
+#define ADC1_NCHANNELS 1
 #define ADC3_NCHANNELS 1
 
 /****************************************************************************
@@ -80,17 +80,15 @@
 
 /* Identifying number of each ADC channel (even if NCHANNELS is less ) */
 
-static const uint8_t g_chanlist1[2] =
+static const uint8_t g_chanlist1[DEV1_NCHANNELS] =
 {
-  5,
   13,
 };
 
 /* Configurations of pins used by each ADC channel */
 
-static const uint32_t g_pinlist1[2]  =
+static const uint32_t g_pinlist1[1]  =
 {
-  GPIO_ADC1_IN5,                /* PA5 */
   GPIO_ADC1_IN13,               /* PC3 */
 };
 

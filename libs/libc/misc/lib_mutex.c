@@ -89,7 +89,7 @@ int nxmutex_init(FAR mutex_t *mutex)
     }
 
   mutex->holder = NXMUTEX_NO_HOLDER;
-  _SEM_SETPROTOCOL(&mutex->sem, SEM_TYPE_MUTEX | SEM_PRIO_INHERIT);
+  _SEM_SETPROTOCOL(&mutex->sem, SEM_PRIO_NONE);
   return ret;
 }
 

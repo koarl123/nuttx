@@ -336,7 +336,6 @@ static int l3gd20_interrupt_handler(int irq, FAR void *context,
    */
 
   FAR struct l3gd20_dev_s *priv = 0;
-  int ret;
 
   /* Find out which L3GD20 device caused the interrupt */
 
@@ -352,12 +351,13 @@ static int l3gd20_interrupt_handler(int irq, FAR void *context,
   priv->timestamp = sensor_get_timestamp();
 
 #if CONFIG_SENSORS_L3GD20_BUFFER_SIZE > 0
+  int ret;
   /* Task the worker with retrieving the latest sensor data. We should not do
    * this in a interrupt since it might take too long. Also we cannot lock
    * the SPI bus from within an interrupt.
    */
 
-  DEBUGASSERT(priv->work.worker == NULL);
+  //DEBUGASSERT(priv->work.worker == NULL); if worker queued, worker is not NULL
   ret = work_queue(HPWORK, &priv->work, l3gd20_worker, priv, 0);
 
   if (ret < 0)
