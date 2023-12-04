@@ -44,6 +44,55 @@
   - Window Native Toolchain Issues
 * Documentation
 
+# Steiner Brodaktschns
+
+Relay Pin: PB7, see GPIO_OUT1 in board.h of stm32f429i-disco
+
+tasks.json:
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "pyocd gdbserver",
+            "type": "shell",
+            "command": "pyocd gdbserver --target STM32F429ZITx"
+        },
+        {
+            "label": "pyocd program",
+            "type": "shell",
+            "command": "pyocd load ./nuttx/nuttx --target STM32F429ZITx --format elf",
+            "problemMatcher": []
+        },
+        {
+            "label": "openocd gdbserver",
+            "type": "shell",
+            "command": "openocd -f board/stm32f429disc1.cfg",
+            "problemMatcher": []
+        }
+    ]
+}
+
+launch.json:
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Cortex Debug",
+            "cwd": "${workspaceFolder}",
+            "executable": "./nuttx/nuttx",
+            "request": "attach",
+            "type": "cortex-debug",
+            "runToEntryPoint": "__start",
+            "servertype": "external",
+            "gdbTarget": "localhost:3333",
+            "preResetCommands": [
+                "mon halt",
+                "mon reset"
+            ]
+        }
+    ]
+}
+
 # INTRODUCTION
 
 Apache NuttX is a real-time operating system (RTOS) with an emphasis on

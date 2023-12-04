@@ -463,4 +463,13 @@
 
 #define ADC1_DMA_CHAN DMAMAP_ADC1_1
 
+/* GPIO *********************************************************************/
+
+#define BOARD_NGPIOOUT 1
+#define BOARD_NGPIOIN 0
+#define BOARD_NGPIOINT 0
+
+// output for relay used by temprelaydisp
+#define GPIO_OUT1 (GPIO_OUTPUT|GPIO_PULLDOWN|GPIO_AF0|GPIO_SPEED_2MHz|GPIO_PORTB|GPIO_PIN7)
+
 #endif /* __BOARDS_ARM_STM32_STM32F429I_DISCO_INCLUDE_BOARD_H */

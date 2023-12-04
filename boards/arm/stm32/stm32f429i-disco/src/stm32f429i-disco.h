@@ -388,5 +388,21 @@ int stm32_pwm_setup(void);
 int stm32_adc_setup(void);
 #endif
 
+/****************************************************************************
+ * Name: stm32_gpio_initialize
+ *
+ * Description:
+ *   initialize IOs (relay output)
+ *
+ * Returned Value:
+ *   Zero is returned on success.  Otherwise, a negated errno value is
+ *   returned to indicate the nature of the failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_EXAMPLES_TEMPRELAYDISP
+int stm32_gpio_initialize(void);
+#endif
+
 #endif /* __ASSEMBLY__ */
 #endif /* __BOARDS_ARM_STM32_STM32F429I_DISCO_SRC_STM32F429I_DISCO_H */
