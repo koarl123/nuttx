@@ -65,7 +65,7 @@ int pthread_detach(pthread_t thread)
   FAR struct tcb_s *rtcb = this_task();
   FAR struct task_group_s *group = rtcb->group;
   FAR struct join_s *pjoin;
-  int ret = OK;
+  int ret;
 
   sinfo("Thread=%d group=%p\n", thread, group);
   DEBUGASSERT(group);
@@ -73,13 +73,8 @@ int pthread_detach(pthread_t thread)
   /* Find the entry associated with this pthread. */
 
   nxmutex_lock(&group->tg_joinlock);
-  pjoin = pthread_findjoininfo(group, (pid_t)thread);
-  if (!pjoin)
-    {
-      serr("ERROR: Could not find thread entry\n");
-      ret = EINVAL;
-    }
-  else
+  ret = pthread_findjoininfo(group, (pid_t)thread, &pjoin);
+  if (ret == OK)
     {
       /* Has the thread already terminated? */
 

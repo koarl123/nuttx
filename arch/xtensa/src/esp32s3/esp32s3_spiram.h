@@ -76,7 +76,7 @@ int esp_spiram_add_to_heapalloc(void);
  * @brief Get the available physical size of the attached SPI RAM chip
  *
  * @note If ECC is enabled, the available physical size would be smaller
- * than the physical size. See `CONFIG_SPIRAM_ECC_ENABLE`
+ * than the physical size. See `CONFIG_ESP32S3_SPIRAM_ECC_ENABLE`
  *
  * @return Size in bytes, or 0 if no external RAM chip support compiled in.
  */
@@ -198,6 +198,22 @@ uint32_t rodata_flash_end_page_get(void);
 int rodata_flash2spiram_offset(void);
 
 #endif
+
+/**
+ * @brief Get allocable virtual start address
+ *
+ * @return Allocable virtual start address
+ */
+
+uint32_t esp_spiram_allocable_vaddr_start(void);
+
+/**
+ * @brief Get allocable virtual end address
+ *
+ * @return Allocable virtual end address
+ */
+
+uint32_t esp_spiram_allocable_vaddr_end(void);
 
 #ifdef __cplusplus
 }

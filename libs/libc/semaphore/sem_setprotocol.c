@@ -77,21 +77,24 @@ int nxsem_set_protocol(FAR sem_t *sem, int protocol)
 {
   DEBUGASSERT(sem != NULL);
 
-  switch (protocol)
+  switch (protocol & SEM_PRIO_MASK)
     {
       case SEM_PRIO_NONE:
-        return OK;
+        break;
 
       case SEM_PRIO_INHERIT:
       case SEM_PRIO_PROTECT:
         return -ENOTSUP;
 
       default:
-        break;
+        return -EINVAL;
     }
 
-  return -EINVAL;
+  sem->flags = protocol;
+  return OK;
 }
+
+#endif /* !CONFIG_PRIORITY_INHERITANCE */
 
 /****************************************************************************
  * Name: sem_setprotocol
@@ -143,5 +146,3 @@ int sem_setprotocol(FAR sem_t *sem, int protocol)
 
   return ret;
 }
-
-#endif /* !CONFIG_PRIORITY_INHERITANCE */

@@ -24,7 +24,6 @@
 
 #include <nuttx/config.h>
 
-#include <malloc.h>
 #include <assert.h>
 #include <debug.h>
 
@@ -33,23 +32,33 @@
 #include "mm_heap/mm.h"
 
 /****************************************************************************
+ * Private Types
+ ****************************************************************************/
+
+struct mm_mallinfo_handler_s
+{
+  FAR const struct malltask *task;
+  FAR struct mallinfo_task *info;
+};
+
+/****************************************************************************
  * Private Functions
  ****************************************************************************/
 
 static void mallinfo_handler(FAR struct mm_allocnode_s *node, FAR void *arg)
 {
   FAR struct mallinfo *info = arg;
-  size_t nodesize = SIZEOF_MM_NODE(node);
+  size_t nodesize = MM_SIZEOF_NODE(node);
 
   minfo("node=%p size=%zu preceding=%u (%c)\n",
         node, nodesize, (unsigned int)node->preceding,
-        (node->size & MM_ALLOC_BIT) ? 'A' : 'F');
+        MM_NODE_IS_ALLOC(node) ? 'A' : 'F');
 
   /* Check if the node corresponds to an allocated memory chunk */
 
-  if ((node->size & MM_ALLOC_BIT) != 0)
+  if (MM_NODE_IS_ALLOC(node))
     {
-      DEBUGASSERT(nodesize >= SIZEOF_MM_ALLOCNODE);
+      DEBUGASSERT(nodesize >= MM_SIZEOF_ALLOCNODE);
       info->aordblks++;
       info->uordblks += nodesize;
     }
@@ -59,12 +68,12 @@ static void mallinfo_handler(FAR struct mm_allocnode_s *node, FAR void *arg)
 
       DEBUGASSERT(nodesize >= MM_MIN_CHUNK);
       DEBUGASSERT(fnode->blink->flink == fnode);
-      DEBUGASSERT(SIZEOF_MM_NODE(fnode->blink) <= nodesize);
+      DEBUGASSERT(MM_SIZEOF_NODE(fnode->blink) <= nodesize);
       DEBUGASSERT(fnode->flink == NULL ||
                   fnode->flink->blink == fnode);
       DEBUGASSERT(fnode->flink == NULL ||
-                  SIZEOF_MM_NODE(fnode->flink) == 0 ||
-                  SIZEOF_MM_NODE(fnode->flink) >= nodesize);
+                  MM_SIZEOF_NODE(fnode->flink) == 0 ||
+                  MM_SIZEOF_NODE(fnode->flink) >= nodesize);
 
       info->ordblks++;
       info->fordblks += nodesize;
@@ -78,25 +87,34 @@ static void mallinfo_handler(FAR struct mm_allocnode_s *node, FAR void *arg)
 static void mallinfo_task_handler(FAR struct mm_allocnode_s *node,
                                   FAR void *arg)
 {
-  FAR struct mallinfo_task *info = arg;
-  size_t nodesize = SIZEOF_MM_NODE(node);
+  FAR struct mm_mallinfo_handler_s *handler = arg;
+  FAR const struct malltask *task = handler->task;
+  FAR struct mallinfo_task *info = handler->info;
+  size_t nodesize = MM_SIZEOF_NODE(node);
 
   /* Check if the node corresponds to an allocated memory chunk */
 
-  if ((node->size & MM_ALLOC_BIT) != 0)
+  if (MM_NODE_IS_ALLOC(node))
     {
-      DEBUGASSERT(nodesize >= SIZEOF_MM_ALLOCNODE);
+      DEBUGASSERT(nodesize >= MM_SIZEOF_ALLOCNODE);
 #if CONFIG_MM_BACKTRACE < 0
-      if (info->pid == -1)
-#else
-      if (info->pid == -1 || node->pid == info->pid)
-#endif
+      if (task->pid == PID_MM_ALLOC)
         {
           info->aordblks++;
           info->uordblks += nodesize;
         }
+#else
+      if ((MM_DUMP_ASSIGN(task->pid, node->pid) ||
+           MM_DUMP_ALLOC(task->pid, node->pid) ||
+           MM_DUMP_LEAK(task->pid, node->pid)) &&
+          node->seqno >= task->seqmin && node->seqno <= task->seqmax)
+        {
+          info->aordblks++;
+          info->uordblks += nodesize;
+        }
+#endif
     }
-  else if (info->pid == -2)
+  else if (task->pid == PID_MM_FREE)
     {
       info->aordblks++;
       info->uordblks += nodesize;
@@ -115,33 +133,30 @@ static void mallinfo_task_handler(FAR struct mm_allocnode_s *node,
  *
  ****************************************************************************/
 
-int mm_mallinfo(FAR struct mm_heap_s *heap, FAR struct mallinfo *info)
+struct mallinfo mm_mallinfo(FAR struct mm_heap_s *heap)
 {
-#if CONFIG_MM_REGIONS > 1
-  int region = heap->mm_nregions;
-#else
-# define region 1
+  struct mallinfo info;
+#if CONFIG_MM_HEAP_MEMPOOL_THRESHOLD != 0
+  struct mallinfo poolinfo;
 #endif
 
-  DEBUGASSERT(info);
+  memset(&info, 0, sizeof(info));
+  mm_foreach(heap, mallinfo_handler, &info);
+  info.arena = heap->mm_heapsize;
+  info.arena += sizeof(struct mm_heap_s);
+  info.uordblks += sizeof(struct mm_heap_s);
+  info.usmblks = heap->mm_maxused + sizeof(struct mm_heap_s);
 
-  memset(info, 0, sizeof(*info));
-  mm_foreach(heap, mallinfo_handler, info);
+#if CONFIG_MM_HEAP_MEMPOOL_THRESHOLD != 0
+  poolinfo = mempool_multiple_mallinfo(heap->mm_mpool);
 
-  info->arena = heap->mm_heapsize;
+  info.uordblks -= poolinfo.fordblks;
+  info.fordblks += poolinfo.fordblks;
+#endif
 
-  /* Account for the heap->mm_heapend[region] node overhead and the
-   * heap->mm_heapstart[region]->preceding:
-   * heap->mm_heapend[region] overhead size     = OVERHEAD_MM_ALLOCNODE
-   * heap->mm_heapstart[region]->preceding size = sizeof(mmsize_t)
-   * and SIZEOF_MM_ALLOCNODE = OVERHEAD_MM_ALLOCNODE + sizeof(mmsize_t).
-   */
+  DEBUGASSERT(info.uordblks + info.fordblks == info.arena);
 
-  info->uordblks += region * SIZEOF_MM_ALLOCNODE;
-
-  DEBUGASSERT((size_t)info->uordblks + info->fordblks == heap->mm_heapsize);
-
-  return OK;
+  return info;
 }
 
 /****************************************************************************
@@ -153,18 +168,22 @@ int mm_mallinfo(FAR struct mm_heap_s *heap, FAR struct mallinfo *info)
  *
  ****************************************************************************/
 
-int mm_mallinfo_task(FAR struct mm_heap_s *heap,
-                     FAR struct mallinfo_task *info)
+struct mallinfo_task mm_mallinfo_task(FAR struct mm_heap_s *heap,
+                                      FAR const struct malltask *task)
 {
-  DEBUGASSERT(info);
-
-  info->uordblks = 0;
-  info->aordblks = 0;
+  struct mm_mallinfo_handler_s handle;
+  struct mallinfo_task info =
+    {
+      0, 0
+    };
 
 #if CONFIG_MM_HEAP_MEMPOOL_THRESHOLD != 0
-  mempool_multiple_info_task(heap->mm_mpool, info);
+  info = mempool_multiple_info_task(heap->mm_mpool, task);
 #endif
 
-  mm_foreach(heap, mallinfo_task_handler, info);
-  return OK;
+  handle.task = task;
+  handle.info = &info;
+  mm_foreach(heap, mallinfo_task_handler, &handle);
+
+  return info;
 }

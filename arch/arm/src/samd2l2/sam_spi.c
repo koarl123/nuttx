@@ -20,7 +20,7 @@
 
 /* References:
  *   1. "Atmel SAM D20J / SAM D20G / SAM D20E ARM-Based Microcontroller
- *      Datasheet", 42129J–SAM–12/2013
+ *      Datasheet", 42129J-SAM-12/2013
  */
 
 /****************************************************************************
@@ -136,7 +136,7 @@ struct sam_spidev_s
 static bool     spi_checkreg(struct sam_spidev_s *priv, bool wr,
                   uint32_t regval, uint32_t regaddr);
 #else
-# define        spi_checkreg(priv,wr,regval,regaddr) (false)
+#  define       spi_checkreg(priv,wr,regval,regaddr) (false)
 #endif
 
 static uint8_t  spi_getreg8(struct sam_spidev_s *priv,
@@ -159,7 +159,7 @@ static void spi_dma_setup(struct sam_spidev_s *priv);
 #ifdef CONFIG_DEBUG_SPI_INFO
 static void     spi_dumpregs(struct sam_spidev_s *priv, const char *msg);
 #else
-# define        spi_dumpregs(priv,msg)
+#  define       spi_dumpregs(priv,msg)
 #endif
 
 /* Interrupt handling */

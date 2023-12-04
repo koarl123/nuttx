@@ -254,7 +254,7 @@ static void touch_init(struct touch_config_s *config)
       return;
     }
 
-  touch_mux = (mutex_t *) kmm_zalloc(sizeof(mutex_t));
+  touch_mux = kmm_zalloc(sizeof(mutex_t));
 
   if (touch_mux == NULL)
     {
@@ -531,7 +531,11 @@ bool esp32s2_touchread(enum touch_pad_e tp)
 
   leave_critical_section(flags);
 
+#ifdef CONFIG_ESP32S2_TOUCH_THRESHOLD_POSEDGE
+  return (value < touch_pad_logic_threshold[tp]);
+#else
   return (value > touch_pad_logic_threshold[tp]);
+#endif
 }
 
 /****************************************************************************

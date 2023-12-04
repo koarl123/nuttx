@@ -70,10 +70,11 @@ int nxsem_trywait(FAR sem_t *sem)
   irqstate_t flags;
   int ret;
 
-  /* This API should not be called from interrupt handlers & idleloop */
+  /* This API should not be called from the idleloop */
 
-  DEBUGASSERT(sem != NULL && up_interrupt_context() == false);
-  DEBUGASSERT(!OSINIT_IDLELOOP() || !sched_idletask());
+  DEBUGASSERT(sem != NULL);
+  DEBUGASSERT(!OSINIT_IDLELOOP() || !sched_idletask() ||
+              up_interrupt_context());
 
   /* The following operations must be performed with interrupts disabled
    * because sem_post() may be called from an interrupt handler.
@@ -102,48 +103,5 @@ int nxsem_trywait(FAR sem_t *sem)
   /* Interrupts may now be enabled. */
 
   leave_critical_section(flags);
-  return ret;
-}
-
-/****************************************************************************
- * Name: sem_trywait
- *
- * Description:
- *   This function locks the specified semaphore only if the semaphore is
- *   currently not locked.  In either case, the call returns without
- *   blocking.
- *
- * Input Parameters:
- *   sem - the semaphore descriptor
- *
- * Returned Value:
- *   Zero (OK) on success or -1 (ERROR) if unsuccessful. If this function
- *   returns -1(ERROR), then the cause of the failure will be reported in
- *   errno variable as:
- *
- *     EINVAL - Invalid attempt to get the semaphore
- *     EAGAIN - The semaphore is not available.
- *
- ****************************************************************************/
-
-int sem_trywait(FAR sem_t *sem)
-{
-  int ret;
-
-  if (sem == NULL)
-    {
-      set_errno(EINVAL);
-      return ERROR;
-    }
-
-  /* Let nxsem_trywait do the real work */
-
-  ret = nxsem_trywait(sem);
-  if (ret < 0)
-    {
-      set_errno(-ret);
-      ret = ERROR;
-    }
-
   return ret;
 }

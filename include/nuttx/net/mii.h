@@ -53,11 +53,16 @@
 #define MII_PSECONTROL               0x0b      /* PSE control register */
 #define MII_PSESTATUS                0x0c      /* PSE status register */
 #define MII_MMDCONTROL               0x0d      /* MMD access control register */
+#define MII_MMDADDRDATA              0x0e      /* MMD access address data register */
 #define MII_ESTATUS                  0x0f      /* Extended status register */
 
 /* Extended Registers: Registers 16-31 may be used for vendor specific
  * abilities
  */
+
+/* AR8031: */
+
+#define MII_AR8031_PSSR              0x11      /* Phy-Specific Status Register */
 
 /* National Semiconductor DP83840: 0x07-0x11, 0x14, 0x1a, 0x1d-0x1f
  * reserved
@@ -207,6 +212,20 @@
 #define MII_LAN8740_ISR              0x1d      /* Interrupt Source Register */
 #define MII_LAN8740_IMR              0x1e      /* Interrupt Mask Register */
 #define MII_LAN8740_SCSR             0x1f      /* PHY Special Control/Status Register */
+
+/* Motorcomm YT8512C/YT8512H Extended Registers */
+
+#define MII_YT8512_PHYSFC            0x10      /* PHY Function conrtol Register */
+#define MII_YT8512_PHYSTS            0x11      /* PHY Status Register */
+#define MII_YT8512_IMR               0x12      /* Interrupt Mask Register */
+#define MII_YT8512_ISR               0x13      /* Interrupt Source Register */
+#define MII_YT8512_SADC              0x14      /* Speed auto downgrade control Register */
+#define MII_YT8512_REC               0x15      /* Rx Error Counter Register */
+#define MII_YT8512_DEBUG_ADDR_OFFSET 0x1E      /* Debug Register's Address Offset Register */
+#define MII_YT8512_DEBUG_DATA        0x1F      /* Debug Register's Data Register */
+
+#define MII_YT8512_LED0              0x40c0    /* LED0 control */
+#define MII_YT8512_LED1              0x40c3    /* LED1 control */
 
 /* MII register bit settings ************************************************/
 
@@ -615,6 +634,9 @@
 #define MII_PHYID1_KSZ8051           0x0022    /* ID1 value for Micrel KSZ8051 */
 #define MII_PHYID2_KSZ8051           0x1550    /* ID2 value for Micrel KSZ8051 */
 
+#define MII_PHYID1_KSZ8061           0x0022    /* ID1 value for Micrel KSZ8061 */
+#define MII_PHYID2_KSZ8061           0x1573    /* ID2 value for Micrel KSZ8061 */
+
 #define MII_PHYID1_KSZ8081           0x0022    /* ID1 value for Micrel KSZ8081 */
 #define MII_PHYID2_KSZ8081           0x1560    /* ID2 value for Micrel KSZ8081 */
 
@@ -624,7 +646,7 @@
 #define KSZ8081_DRCTRL_PLLOFF        (1 << 4)  /* Bit 4: Turn PLL off in EDPD mode */
                                                /* Bits 0-3: Reserved */
 
-/* KSZ8041/51/81 Register 0x1b: Interrupt control/status */
+/* KSZ8041/51/61/81 Register 0x1b: Interrupt control/status */
 
 #define MII_KSZ80X1_INT_JEN          (1 << 15) /* Jabber interrupt enable */
 #define MII_KSZ80X1_INT_REEN         (1 << 14) /* Receive error interrupt enable */
@@ -643,6 +665,18 @@
 #define MII_KSZ80X1_INT_LD           (1 << 2)  /* Link down fault interrupt */
 #define MII_KSZ80X1_INT_RF           (1 << 1)  /* Remote fault interrupt */
 #define MII_KSZ80X1_INT_LU           (1 << 0)  /* Link up interrupt */
+
+/* KSZ8061 Register 0x1e: PHY Control 1 */
+
+#define MII_KSZ8061_PC2_PE           (1 << 9)  /* Enable pause (flow control) */
+#define MII_KSZ8061_PC2_LS           (1 << 8)  /* Link status */
+#define MII_KSZ8061_PC2_PS           (1 << 7)  /* Polarity status */
+#define MII_KSZ8061_PC2_XS           (1 << 5)  /* MID/MDI-X Status */
+#define MII_KSZ8061_PC2_ED           (1 << 4)  /* Energy detect */
+#define MII_KSZ8061_PC2_PI           (1 << 3)  /* PHY isolate */
+#define MII_KSZ8061_PC2_FD           (1 << 2)  /* Full duplex */
+#define MII_KSZ8061_PC2_100T         (1 << 1)  /* 100base-tx speed */
+#define MII_KSZ8061_PC2_10T          (1 << 0)  /* 10base-t speed */
 
 /* KSZ8041 Register 0x1e: PHY Control 1 -- To be provided */
 
@@ -671,7 +705,7 @@
 #define MII_PHYCTRL2_SEQTEST         (1 << 1)  /* Bit 1:  Enable SQE test */
 #define MII_PHYCTRL2_DISDS           (1 << 0)  /* Bit 1:  Disable data scrambling */
 
-/* KSZ8051/81 Register 0x1e: PHY Control 1 */
+/* KSZ8051/61/81 Register 0x1e: PHY Control 1 */
 
                                                /* Bits 10-15: Reserved */
 #define MII_PHYCTRL1_ENPAUSE         (1 << 9)  /* Bit 9:  Enable pause */
@@ -840,6 +874,42 @@
 #define MII_DP83848C_ANC_INT_EN       (1 << 2)  /* Enable Interrupt on Auto-negotiation complete event. */
 #define MII_DP83848C_FHF_INT_EN       (1 << 1)  /* Enable Interrupt on False Carrier Counter Register half-full event. */
 #define MII_DP83848C_RHF_INT_EN       (1 << 0)  /* Enable Interrupt on Receive Error Counter Register half-full event. */
+
+/* Atheros AR8031 MII ID1/2 register bits */
+
+#define MII_PHYID1_AR8031             0x004d     /* ID1 value for AR8031 */
+#define MII_PHYID2_AR8031             0xd074     /* ID2 value for AR8031 */
+
+#define MII_AR8031_PSSR_SPEEDMASK     (3 << 14)  /* Bit 14-15: Speed */
+#define MII_AR8031_PSSR_10MBPS        (0 << 14)
+#define MII_AR8031_PSSR_100MBPS       (1 << 14)
+#define MII_AR8031_PSSR_1000MBPS      (2 << 14)
+#define MII_AR8031_PSSR_DUPLEX        (1 << 13)  /* Bit 13:  Full duplex mode */
+
+/* YT8512 register bit settings *********************************************/
+
+/* YT8512 MII ID1/2 register bits */
+
+#define MII_PHYID1_YT8512             0x0000    /* ID1 value for YT8512 */
+#define MII_PHYID2_YT8512             0x0128    /* ID2 value for YT8512 */
+
+/* YT8512 Register 0x10: Specific function control register */
+
+/* YT8512 Register 0x11: Specific status */
+
+#define MII_YT8512_PHYSTS_SPEED       (1 << 14)
+#define MII_YT8512_PHYSTS_DUPLEX      (1 << 13)
+/* YT8512 Register 0x12: Interrupt mask */
+#define MII_YT8512_IMR_SPD_EN         (1 << 14)
+#define MII_YT8512_IMR_DUP_EN         (1 << 13)
+#define MII_YT8512_IMR_LD_EN          (1 << 11)
+#define MII_YT8512_IMR_LU_EN          (1 << 10)
+
+/* YT8512 Register 0x13: Interrupt status */
+
+/* YT8512 Register 0x14: Speed auto downgrade control */
+
+/* YT8512 Register 0x15: Rx error counter */
 
 /****************************************************************************
  * Type Definitions

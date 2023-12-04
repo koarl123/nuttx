@@ -528,7 +528,7 @@
  * blocked.
  */
 
-# if defined(CONFIG_USART1_RXDMA) && defined(CONFIG_USART1_IFLOWCONTROL)
+#  if defined(CONFIG_USART1_RXDMA) && defined(CONFIG_USART1_IFLOWCONTROL)
 #    warning "RXDMA and IFLOWCONTROL both enabled for USART1. \
               This combination can lead to data loss."
 #  endif
@@ -3369,9 +3369,11 @@ static void up_dma_txavailable(struct uart_dev_s *dev)
 
   /* Only send when the DMA is idle */
 
-  nxsem_wait(&priv->txdmasem);
-
-  uart_xmitchars_dma(dev);
+  int rv = nxsem_trywait(&priv->txdmasem);
+  if (rv == OK)
+    {
+      uart_xmitchars_dma(dev);
+    }
 }
 #endif
 

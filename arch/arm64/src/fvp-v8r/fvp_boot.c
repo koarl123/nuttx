@@ -164,6 +164,19 @@ uint64_t arm64_get_mpid(int cpu)
   return CORE_TO_MPID(cpu, 0);
 }
 
+/****************************************************************************
+ * Name: arm64_get_cpuid
+ *
+ * Description:
+ *   The function from mpid to get cpu id
+ *
+ ****************************************************************************/
+
+int arm64_get_cpuid(uint64_t mpid)
+{
+  return MPID_TO_CORE(mpid, 0);
+}
+
 #endif /* CONFIG_SMP */
 
 /****************************************************************************
@@ -177,11 +190,6 @@ uint64_t arm64_get_mpid(int cpu)
 void arm64_chip_boot(void)
 {
   /* MAP IO and DRAM, enable MMU. */
-
-  uint64_t cpumpid;
-  cpumpid = read_sysreg(mpidr_el1);
-
-  sinfo("Main CPU 0x%-16"PRIx64"", cpumpid);
 
   arm64_mpu_init(true);
 

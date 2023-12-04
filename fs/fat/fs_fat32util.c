@@ -652,7 +652,7 @@ int fat_mount(struct fat_mountpt_s *fs, bool writeable)
 
 errout_with_buffer:
   fat_io_free(fs->fs_buffer, fs->fs_hwsectorsize);
-  fs->fs_buffer = 0;
+  fs->fs_buffer = NULL;
 
 errout:
   fs->fs_mounted = false;
@@ -986,7 +986,7 @@ int fat_putcluster(struct fat_mountpt_s *fs, uint32_t clusterno,
                   /* Save the LS four bits of the next cluster */
 
                   value = (fs->fs_buffer[fatindex] & 0x0f) |
-                           nextcluster << 4;
+                           (uint8_t)nextcluster << 4;
                 }
               else
                 {

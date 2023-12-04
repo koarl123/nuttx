@@ -136,7 +136,7 @@ static int  automount_interrupt(FAR const struct automount_lower_s *lower,
  ****************************************************************************/
 
 #ifdef CONFIG_FS_AUTOMOUNTER_DRIVER
-static const struct file_operations automount_fops =
+static const struct file_operations g_automount_fops =
 {
   automount_open,       /* open */
   automount_close,      /* close */
@@ -213,8 +213,7 @@ static int automount_open(FAR struct file *filep)
 
   /* Allocate a new open structure */
 
-  opriv = (FAR struct automounter_open_s *)kmm_zalloc(
-      sizeof(struct automounter_open_s));
+  opriv = kmm_zalloc(sizeof(struct automounter_open_s));
   if (opriv == NULL)
     {
       ferr("ERROR: Failed to allocate open structure\n");
@@ -250,11 +249,11 @@ static int automount_close(FAR struct file *filep)
   FAR struct automounter_open_s *prev;
   int ret;
 
-  DEBUGASSERT(filep && filep->f_priv && filep->f_inode);
+  DEBUGASSERT(filep->f_priv);
   opriv = filep->f_priv;
   inode = filep->f_inode;
   DEBUGASSERT(inode->i_private);
-  priv  = (FAR struct automounter_state_s *)inode->i_private;
+  priv  = inode->i_private;
 
   /* Get exclusive access to the driver structure */
 
@@ -317,11 +316,11 @@ static int automount_ioctl(FAR struct file *filep, int cmd,
   FAR struct automounter_open_s *opriv;
   int ret;
 
-  DEBUGASSERT(filep && filep->f_priv && filep->f_inode);
+  DEBUGASSERT(filep->f_priv);
   opriv = filep->f_priv;
   inode = filep->f_inode;
   DEBUGASSERT(inode->i_private);
-  priv  = (FAR struct automounter_state_s *)inode->i_private;
+  priv  = inode->i_private;
 
   /* Get exclusive access to the driver structure */
 
@@ -819,9 +818,7 @@ FAR void *automount_initialize(FAR const struct automount_lower_s *lower)
 
   /* Allocate an auto-mounter state structure */
 
-  priv = (FAR struct automounter_state_s *)
-    kmm_zalloc(sizeof(struct automounter_state_s));
-
+  priv = kmm_zalloc(sizeof(struct automounter_state_s));
   if (priv == NULL)
     {
       ferr("ERROR: Failed to allocate state structure\n");
@@ -857,9 +854,10 @@ FAR void *automount_initialize(FAR const struct automount_lower_s *lower)
 
   /* Register driver */
 
-  sprintf(devpath, CONFIG_FS_AUTOMOUNTER_VFS_PATH "%s", lower->mountpoint);
+  snprintf(devpath, sizeof(devpath),
+           CONFIG_FS_AUTOMOUNTER_VFS_PATH "%s", lower->mountpoint);
 
-  ret = register_driver(devpath, &automount_fops, 0444, priv);
+  ret = register_driver(devpath, &g_automount_fops, 0444, priv);
   if (ret < 0)
     {
       ferr("ERROR: Failed to register automount driver: %d\n", ret);
@@ -918,8 +916,8 @@ void automount_uninitialize(FAR void *handle)
     {
       char devpath[PATH_MAX];
 
-      sprintf(devpath, CONFIG_FS_AUTOMOUNTER_VFS_PATH "%s",
-              lower->mountpoint);
+      snprintf(devpath, sizeof(devpath),
+               CONFIG_FS_AUTOMOUNTER_VFS_PATH "%s", lower->mountpoint);
 
       unregister_driver(devpath);
     }

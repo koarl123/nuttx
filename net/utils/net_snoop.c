@@ -22,6 +22,7 @@
  * Included Files
  ****************************************************************************/
 
+#include <assert.h>
 #include <endian.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -360,7 +361,8 @@ int snoop_open(FAR struct snoop_s *snoop, FAR const char *filename,
         }
     }
 
-  ret = file_open(&snoop->filep, filename, O_RDWR | O_CREAT);
+  ret = file_open(&snoop->filep, filename, O_RDWR | O_CREAT | O_CLOEXEC,
+                  0666);
   if (ret < 0)
     {
       return ret;

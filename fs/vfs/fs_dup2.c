@@ -23,11 +23,14 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+#include <nuttx/fs/fs.h>
+#include <nuttx/fs/ioctl.h>
 
 #include <unistd.h>
 #include <sched.h>
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #include "inode/inode.h"
 
@@ -36,13 +39,13 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: file_dup2
+ * Name: file_dup3
  *
  * Description:
  *   Assign an inode to a specific files structure.  This is the heart of
- *   dup2.
+ *   dup3.
  *
- *   Equivalent to the non-standard dup2() function except that it
+ *   Equivalent to the non-standard dup3() function except that it
  *   accepts struct file instances instead of file descriptors and it does
  *   not set the errno variable.
  *
@@ -52,7 +55,7 @@
  *
  ****************************************************************************/
 
-int file_dup2(FAR struct file *filep1, FAR struct file *filep2)
+int file_dup3(FAR struct file *filep1, FAR struct file *filep2, int flags)
 {
   FAR struct inode *inode;
   struct file temp;
@@ -61,6 +64,11 @@ int file_dup2(FAR struct file *filep1, FAR struct file *filep2)
   if (filep1 == NULL || filep1->f_inode == NULL || filep2 == NULL)
     {
       return -EBADF;
+    }
+
+  if (flags != 0 && flags != O_CLOEXEC)
+    {
+      return -EINVAL;
     }
 
   if (filep1 == filep2)
@@ -79,10 +87,21 @@ int file_dup2(FAR struct file *filep1, FAR struct file *filep2)
 
   /* Then clone the file structure */
 
-  temp.f_oflags = filep1->f_oflags;
+  memset(&temp, 0, sizeof(temp));
+
+  /* The two filep don't share flags (the close-on-exec flag). */
+
+  if (flags == O_CLOEXEC)
+    {
+      temp.f_oflags = filep1->f_oflags | O_CLOEXEC;
+    }
+  else
+    {
+      temp.f_oflags = filep1->f_oflags & ~O_CLOEXEC;
+    }
+
   temp.f_pos    = filep1->f_pos;
   temp.f_inode  = inode;
-  temp.f_priv   = NULL;
 
   /* Call the open method on the file, driver, mountpoint so that it
    * can maintain the correct open counts.
@@ -107,9 +126,24 @@ int file_dup2(FAR struct file *filep1, FAR struct file *filep2)
 
           temp.f_priv = filep1->f_priv;
 
+          /* Add nonblock flags to avoid happening block when
+           * calling open()
+           */
+
+          temp.f_oflags |= O_NONBLOCK;
+
           if (inode->u.i_ops->open)
             {
               ret = inode->u.i_ops->open(&temp);
+            }
+
+          if (ret >= 0 && (filep1->f_oflags & O_NONBLOCK) == 0)
+            {
+              ret = file_ioctl(&temp, FIONBIO, 0);
+              if (ret < 0 && inode->u.i_ops->close)
+                {
+                  ret = inode->u.i_ops->close(&temp);
+                }
             }
         }
 
@@ -133,4 +167,26 @@ int file_dup2(FAR struct file *filep1, FAR struct file *filep2)
 
   memcpy(filep2, &temp, sizeof(temp));
   return OK;
+}
+
+/****************************************************************************
+ * Name: file_dup2
+ *
+ * Description:
+ *   Assign an inode to a specific files structure.  This is the heart of
+ *   dup2.
+ *
+ *   Equivalent to the non-standard dup2() function except that it
+ *   accepts struct file instances instead of file descriptors and it does
+ *   not set the errno variable.
+ *
+ * Returned Value:
+ *   Zero (OK) is returned on success; a negated errno value is return on
+ *   any failure.
+ *
+ ****************************************************************************/
+
+int file_dup2(FAR struct file *filep1, FAR struct file *filep2)
+{
+  return file_dup3(filep1, filep2, 0);
 }

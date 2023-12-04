@@ -38,6 +38,23 @@
  * Private Functions
  ****************************************************************************/
 
+static clock_t iob_allocwait_gettimeout(clock_t start, unsigned int timeout)
+{
+  sclock_t tick;
+
+  tick = clock_systime_ticks() - start;
+  if (tick >= MSEC2TICK(timeout))
+    {
+      tick = 0;
+    }
+  else
+    {
+      tick = MSEC2TICK(timeout) - tick;
+    }
+
+  return tick;
+}
+
 /****************************************************************************
  * Name: iob_alloc_committed
  *
@@ -56,7 +73,7 @@ static FAR struct iob_s *iob_alloc_committed(void)
    * to protect the committed list:  We disable interrupts very briefly.
    */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&g_iob_lock);
 
   /* Take the I/O buffer from the head of the committed list */
 
@@ -75,7 +92,7 @@ static FAR struct iob_s *iob_alloc_committed(void)
       iob->io_pktlen = 0;    /* Total length of the packet */
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&g_iob_lock, flags);
   return iob;
 }
 
@@ -93,6 +110,7 @@ static FAR struct iob_s *iob_allocwait(bool throttled, unsigned int timeout)
   FAR struct iob_s *iob;
   irqstate_t flags;
   FAR sem_t *sem;
+  clock_t start;
   int ret = OK;
 
 #if CONFIG_IOB_THROTTLE > 0
@@ -115,7 +133,8 @@ static FAR struct iob_s *iob_allocwait(bool throttled, unsigned int timeout)
    * decremented atomically.
    */
 
-  iob = iob_tryalloc(throttled);
+  start = clock_systime_ticks();
+  iob   = iob_tryalloc(throttled);
   while (ret == OK && iob == NULL)
     {
       /* If not successful, then the semaphore count was less than or equal
@@ -130,7 +149,8 @@ static FAR struct iob_s *iob_allocwait(bool throttled, unsigned int timeout)
         }
       else
         {
-          ret = nxsem_tickwait_uninterruptible(sem, MSEC2TICK(timeout));
+          ret = nxsem_tickwait_uninterruptible(sem,
+                                   iob_allocwait_gettimeout(start, timeout));
         }
 
       if (ret >= 0)
@@ -148,7 +168,7 @@ static FAR struct iob_s *iob_allocwait(bool throttled, unsigned int timeout)
                * we will have to wait again.
                */
 
-              nxsem_post(sem);
+              sem->semcount++;
               iob = iob_tryalloc(throttled);
             }
 
@@ -252,7 +272,7 @@ FAR struct iob_s *iob_tryalloc(bool throttled)
    * to protect the free list:  We disable interrupts very briefly.
    */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&g_iob_lock);
 
 #if CONFIG_IOB_THROTTLE > 0
   /* If there are free I/O buffers for this allocation */
@@ -294,7 +314,7 @@ FAR struct iob_s *iob_tryalloc(bool throttled)
           g_throttle_sem.semcount--;
 #endif
 
-          leave_critical_section(flags);
+          spin_unlock_irqrestore(&g_iob_lock, flags);
 
           /* Put the I/O buffer in a known state */
 
@@ -306,6 +326,6 @@ FAR struct iob_s *iob_tryalloc(bool throttled)
         }
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&g_iob_lock, flags);
   return NULL;
 }

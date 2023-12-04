@@ -129,6 +129,10 @@ __start:
 .option pop
 
 #ifdef CONFIG_MPFS_BOOTLOADER
+  /* Clear PMP */
+
+  csrw pmpcfg0, zero
+  csrw pmpcfg2, zero
 
   /* Set all but the boot hart into wfi */
 
@@ -166,10 +170,15 @@ __start:
 
 .continue_boot:
 
-  /* Clear PMP */
+  /* L2 needs to be zeroed before ECC (error correction) is enabled later. */
 
-  csrw pmpcfg0, zero
-  csrw pmpcfg2, zero
+  la  a4, __l2lim_start
+  la  a5, __l2lim_end
+
+.clear_l2lim:
+  sd   x0, 0(a4)
+  add  a4, a4, 8
+  blt  a4, a5, .clear_l2lim
 #endif
 
   /* Set stack pointer to the idle thread stack */

@@ -25,7 +25,9 @@
 #include <nuttx/config.h>
 #include <nuttx/serial/serial.h>
 #include <nuttx/fs/ioctl.h>
+#include <nuttx/serial/uart_ram.h>
 #include <nuttx/wqueue.h>
+#include <string.h>
 #include <sys/types.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -87,10 +89,10 @@ static bool tty_rxavailable(struct uart_dev_s *dev);
 static bool tty_rxflowcontrol(struct uart_dev_s *dev,
                               unsigned int nbuffered, bool upper);
 #ifdef CONFIG_SIM_UART_DMA
-static void tty_dmatxavail(FAR struct uart_dev_s *dev);
-static void tty_dmasend(FAR struct uart_dev_s *dev);
-static void tty_dmarxfree(FAR struct uart_dev_s *dev);
-static void tty_dmareceive(FAR struct uart_dev_s *dev);
+static void tty_dmatxavail(struct uart_dev_s *dev);
+static void tty_dmasend(struct uart_dev_s *dev);
+static void tty_dmarxfree(struct uart_dev_s *dev);
+static void tty_dmareceive(struct uart_dev_s *dev);
 #endif
 static void tty_send(struct uart_dev_s *dev, int ch);
 static void tty_txint(struct uart_dev_s *dev, bool enable);
@@ -421,19 +423,19 @@ static void tty_work(void *arg)
       return;
     }
 
-  if (priv->txint && host_uart_checkout(dev->isconsole ? 1 : priv->fd))
+  if (priv->txint)
     {
 #ifdef CONFIG_SIM_UART_DMA
-      uart_xmitchars_dma(dev);
+      uart_dmatxavail(dev);
 #else
       uart_xmitchars(dev);
 #endif
     }
 
-  if (priv->rxint && host_uart_checkin(priv->fd))
+  if (priv->rxint)
     {
 #ifdef CONFIG_SIM_UART_DMA
-      uart_recvchars_dma(dev);
+      uart_dmarxfree(dev);
 #else
       uart_recvchars(dev);
 #endif
@@ -509,8 +511,12 @@ static bool tty_rxflowcontrol(struct uart_dev_s *dev,
  *
  ****************************************************************************/
 
-static void tty_dmatxavail(FAR struct uart_dev_s *dev)
+static void tty_dmatxavail(struct uart_dev_s *dev)
 {
+  if (uart_txready(dev))
+    {
+      uart_xmitchars_dma(dev);
+    }
 }
 
 /****************************************************************************
@@ -521,7 +527,7 @@ static void tty_dmatxavail(FAR struct uart_dev_s *dev)
  *
  ****************************************************************************/
 
-static void tty_dmasend(FAR struct uart_dev_s *dev)
+static void tty_dmasend(struct uart_dev_s *dev)
 {
   struct tty_priv_s *priv = dev->priv;
   struct uart_dmaxfer_s *xfer = &dev->dmatx;
@@ -555,8 +561,12 @@ static void tty_dmasend(FAR struct uart_dev_s *dev)
  *
  ****************************************************************************/
 
-static void tty_dmarxfree(FAR struct uart_dev_s *dev)
+static void tty_dmarxfree(struct uart_dev_s *dev)
 {
+  if (uart_rxavailable(dev))
+    {
+      uart_recvchars_dma(dev);
+    }
 }
 
 /****************************************************************************
@@ -567,7 +577,7 @@ static void tty_dmarxfree(FAR struct uart_dev_s *dev)
  *
  ****************************************************************************/
 
-static void tty_dmareceive(FAR struct uart_dev_s *dev)
+static void tty_dmareceive(struct uart_dev_s *dev)
 {
   struct tty_priv_s *priv = dev->priv;
   struct uart_dmaxfer_s *xfer = &dev->dmarx;
@@ -658,6 +668,21 @@ static bool tty_txempty(struct uart_dev_s *dev)
 }
 #endif
 
+#ifdef CONFIG_SIM_RAM_UART
+static int sim_uartram_register(FAR const char *devname, bool slave)
+{
+  char name[NAME_MAX];
+  FAR struct uart_rambuf_s *shmem;
+
+  strlcpy(name, strrchr(devname, '/') + 1, NAME_MAX);
+  shmem = host_allocshmem(name, sizeof(struct uart_rambuf_s) * 2, !slave);
+  DEBUGASSERT(shmem);
+
+  memset(shmem, 0, sizeof(struct uart_rambuf_s) * 2);
+  return uart_ram_register(devname, shmem, slave);
+}
+#endif
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -668,6 +693,30 @@ static bool tty_txempty(struct uart_dev_s *dev)
 
 void sim_uartinit(void)
 {
+#ifdef CONFIG_SIM_RAM_UART0
+#  ifdef CONFIG_SIM_RAM_UART0_SLAVE
+  sim_uartram_register("/dev/ttyVS0", true);
+#  else
+  sim_uartram_register("/dev/ttyVS0", false);
+#  endif
+#endif
+
+#ifdef CONFIG_SIM_RAM_UART1
+#  ifdef CONFIG_SIM_RAM_UART1_SLAVE
+  sim_uartram_register("/dev/ttyVS1", true);
+#  else
+  sim_uartram_register("/dev/ttyVS1", false);
+#  endif
+#endif
+
+#ifdef CONFIG_SIM_RAM_UART2
+#  ifdef CONFIG_SIM_RAM_UART2_SLAVE
+  sim_uartram_register("/dev/ttyVS2", true);
+#  else
+  sim_uartram_register("/dev/ttyVS2", false);
+#  endif
+#endif
+
 #ifdef USE_DEVCONSOLE
   /* Start the simulated UART device */
 
@@ -730,4 +779,3 @@ int up_putc(int ch)
 #endif
   return 0;
 }
-

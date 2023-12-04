@@ -92,8 +92,7 @@ int ipv6_getsockname(FAR struct socket *psock, FAR struct sockaddr *addr,
 #ifdef NET_TCP_HAVE_STACK
       case SOCK_STREAM:
         {
-          FAR struct tcp_conn_s *tcp_conn =
-                                (FAR struct tcp_conn_s *)psock->s_conn;
+          FAR struct tcp_conn_s *tcp_conn = psock->s_conn;
 
           outaddr->sin6_port = tcp_conn->lport; /* Already in network byte order */
           lipaddr            = &tcp_conn->u.ipv6.laddr;
@@ -105,8 +104,7 @@ int ipv6_getsockname(FAR struct socket *psock, FAR struct sockaddr *addr,
 #ifdef NET_UDP_HAVE_STACK
       case SOCK_DGRAM:
         {
-          FAR struct udp_conn_s *udp_conn =
-                                (FAR struct udp_conn_s *)psock->s_conn;
+          FAR struct udp_conn_s *udp_conn = psock->s_conn;
 
           outaddr->sin6_port = udp_conn->lport; /* Already in network byte order */
           lipaddr            = &udp_conn->u.ipv6.laddr;
@@ -152,7 +150,8 @@ int ipv6_getsockname(FAR struct socket *psock, FAR struct sockaddr *addr,
   /* Set the address family and the IP address */
 
   outaddr->sin6_family = AF_INET6;
-  memcpy(outaddr->sin6_addr.in6_u.u6_addr8, dev->d_ipv6addr, 16);
+  net_ipv6addr_copy(outaddr->sin6_addr.in6_u.u6_addr8,
+                    netdev_ipv6_srcaddr(dev, *ripaddr));
   *addrlen = sizeof(struct sockaddr_in6);
 
   net_unlock();

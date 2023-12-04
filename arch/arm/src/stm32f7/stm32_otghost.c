@@ -257,6 +257,8 @@ struct stm32_usbhost_s
   volatile struct usbhost_hubport_s *hport;
 #endif
 
+  struct usbhost_devaddr_s devgen;  /* Address generation data */
+
   /* The state of each host channel */
 
   struct stm32_chan_s chan[STM32_MAX_TX_FIFOS];
@@ -274,8 +276,8 @@ static void stm32_checkreg(uint32_t addr, uint32_t val, bool iswrite);
 static uint32_t stm32_getreg(uint32_t addr);
 static void stm32_putreg(uint32_t addr, uint32_t value);
 #else
-# define stm32_getreg(addr)     getreg32(addr)
-# define stm32_putreg(addr,val) putreg32(val,addr)
+#  define stm32_getreg(addr)     getreg32(addr)
+#  define stm32_putreg(addr,val) putreg32(val,addr)
 #endif
 
 static inline void stm32_modifyreg(uint32_t addr, uint32_t clrbits,
@@ -4241,7 +4243,7 @@ static int stm32_alloc(struct usbhost_driver_s *drvr,
 
   /* There is no special memory requirement for the STM32. */
 
-  alloc = (uint8_t *)kmm_malloc(CONFIG_STM32F7_OTG_DESCSIZE);
+  alloc = kmm_malloc(CONFIG_STM32F7_OTG_DESCSIZE);
   if (!alloc)
     {
       return -ENOMEM;
@@ -4325,7 +4327,7 @@ static int stm32_ioalloc(struct usbhost_driver_s *drvr,
 
   /* There is no special memory requirement */
 
-  alloc = (uint8_t *)kmm_malloc(buflen);
+  alloc = kmm_malloc(buflen);
   if (!alloc)
     {
       return -ENOMEM;
@@ -5217,7 +5219,8 @@ static inline void stm32_sw_initialize(struct stm32_usbhost_s *priv)
 
   /* Initialize function address generation logic */
 
-  usbhost_devaddr_initialize(&priv->rhport);
+  usbhost_devaddr_initialize(&priv->devgen);
+  priv->rhport.pdevgen = &priv->devgen;
 
   /* Initialize the driver state data */
 

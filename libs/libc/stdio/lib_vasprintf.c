@@ -84,13 +84,13 @@ int vasprintf(FAR char **ptr, FAR const IPTR char *fmt, va_list ap)
    */
 
   lib_nulloutstream(&nulloutstream);
-  lib_vsprintf((FAR struct lib_outstream_s *)&nulloutstream, fmt, ap);
+  lib_vsprintf(&nulloutstream, fmt, ap);
 
   /* Then allocate a buffer to hold that number of characters, adding one
    * for the null terminator.
    */
 
-  buf = (FAR char *)lib_malloc(nulloutstream.nput + 1);
+  buf = lib_malloc(nulloutstream.nput + 1);
   if (!buf)
     {
 #ifdef va_copy
@@ -104,29 +104,30 @@ int vasprintf(FAR char **ptr, FAR const IPTR char *fmt, va_list ap)
    * null terminator and will not report this in the number of output bytes.
    */
 
-  lib_memoutstream((FAR struct lib_memoutstream_s *)&memoutstream,
-                   buf, nulloutstream.nput + 1);
+  lib_memoutstream(&memoutstream, buf, nulloutstream.nput + 1);
 
   /* Then let lib_vsprintf do it's real thing */
 
 #ifdef va_copy
-  nbytes = lib_vsprintf((FAR struct lib_outstream_s *)&memoutstream.public,
-                        fmt, ap2);
+  nbytes = lib_vsprintf(&memoutstream.common, fmt, ap2);
   va_end(ap2);
 #else
-  nbytes = lib_vsprintf((FAR struct lib_outstream_s *)&memoutstream.public,
-                        fmt, ap);
+  nbytes = lib_vsprintf(&memoutstream.common, fmt, ap);
 #endif
 
   /* Return a pointer to the string to the caller.  NOTE: the memstream put()
    * method has already added the NUL terminator to the end of the string
    * (not included in the nput count).
-   *
-   * Hmmm.. looks like the memory would be stranded if lib_vsprintf()
-   * returned an error.  Does that ever happen?
    */
 
   DEBUGASSERT(nbytes < 0 || nbytes == nulloutstream.nput);
+
+  if (nbytes < 0)
+    {
+      lib_free(buf);
+      return ERROR;
+    }
+
   *ptr = buf;
   return nbytes;
 }

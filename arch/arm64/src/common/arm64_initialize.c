@@ -71,11 +71,22 @@ INIT_STACK_ARRAY_DEFINE(g_cpu_idlestackalloc, CONFIG_SMP_NCPUS,
                           SMP_STACK_SIZE);
 INIT_STACK_ARRAY_DEFINE(g_interrupt_stacks, CONFIG_SMP_NCPUS,
                           INTSTACK_SIZE);
+
+#ifdef CONFIG_ARM64_DECODEFIQ
+INIT_STACK_ARRAY_DEFINE(g_interrupt_fiq_stacks, CONFIG_SMP_NCPUS,
+                          INTSTACK_SIZE);
+#endif
+
 #else
 /* idle thread stack for primary core */
 
 INIT_STACK_DEFINE(g_idle_stack, CONFIG_IDLETHREAD_STACKSIZE);
 INIT_STACK_DEFINE(g_interrupt_stack, INTSTACK_SIZE);
+
+#ifdef CONFIG_ARM64_DECODEFIQ
+INIT_STACK_DEFINE(g_interrupt_fiq_stack, INTSTACK_SIZE);
+#endif
+
 #endif
 
 /****************************************************************************
@@ -133,7 +144,7 @@ static void up_color_intstack(void)
   arm64_stack_color(ptr, INTSTACK_SIZE);
 }
 #else
-# define up_color_intstack()
+#  define up_color_intstack()
 #endif
 
 /****************************************************************************
@@ -145,7 +156,7 @@ static void up_color_intstack(void)
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_FPU
-int arm64_panic_disable_fpu(struct notifier_block *this,
+int arm64_panic_disable_fpu(struct notifier_block *block,
                             unsigned long action, void *data)
 {
   arm64_fpu_disable();
@@ -218,5 +229,10 @@ void up_initialize(void)
   g_fpu_panic_block.notifier_call = arm64_panic_disable_fpu;
   g_fpu_panic_block.priority = INT_MAX;
   panic_notifier_chain_register(&g_fpu_panic_block);
+
+#ifdef CONFIG_FS_PROCFS_REGISTER
+  arm64_fpu_procfs_register();
+#endif
+
 #endif
 }

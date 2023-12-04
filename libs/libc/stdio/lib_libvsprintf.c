@@ -51,6 +51,7 @@
 #include <nuttx/compiler.h>
 #include <nuttx/streams.h>
 #include <nuttx/allsyms.h>
+#include <nuttx/symtab.h>
 
 #include "lib_dtoa_engine.h"
 #include "lib_ultoa_invert.h"
@@ -154,23 +155,6 @@ static int vsprintf_internal(FAR struct lib_outstream_s *stream,
  * Private Functions
  ****************************************************************************/
 
-#ifdef CONFIG_ALLSYMS
-static int sprintf_internal(FAR struct lib_outstream_s *stream,
-                            FAR const IPTR char *fmt, ...)
-{
-  va_list ap;
-  int     n;
-
-  /* Then let vsprintf_internal do the real work */
-
-  va_start(ap, fmt);
-  n = vsprintf_internal(stream, NULL, 0, fmt, ap);
-  va_end(ap);
-
-  return n;
-}
-#endif
-
 static int vsprintf_internal(FAR struct lib_outstream_s *stream,
                              FAR struct arg_s *arglist, int numargs,
                              FAR const IPTR char *fmt, va_list ap)
@@ -182,9 +166,9 @@ static int vsprintf_internal(FAR struct lib_outstream_s *stream,
   union
   {
 #if defined (CONFIG_LIBC_LONG_LONG) || (ULONG_MAX > 4294967295UL)
-    unsigned char __buf[22]; /* Size for -1 in octal, without '\0' */
+    char __buf[22]; /* Size for -1 in octal, without '\0' */
 #else
-    unsigned char __buf[11]; /* Size for -1 in octal, without '\0' */
+    char __buf[11]; /* Size for -1 in octal, without '\0' */
 #endif
 #ifdef CONFIG_LIBC_FLOATINGPOINT
     struct dtoa_s __dtoa;
@@ -423,15 +407,15 @@ static int vsprintf_internal(FAR struct lib_outstream_s *stream,
                     c = 'h';
                     break;
 
-                  case sizeof(unsigned long):
-                    c = 'l';
-                    break;
-
 #if defined(CONFIG_HAVE_LONG_LONG) && ULLONG_MAX != ULONG_MAX
                   case sizeof(unsigned long long):
                     c = 'l';
                     flags |= FL_LONG;
                     flags &= ~FL_SHORT;
+                    break;
+#else
+                  case sizeof(unsigned long):
+                    c = 'l';
                     break;
 #endif
                 }
@@ -632,7 +616,7 @@ flt_oper:
           exp = _dtoa.exp;
 
           sign = 0;
-          if ((_dtoa.flags & DTOA_MINUS) && !(_dtoa.flags & DTOA_NAN))
+          if (_dtoa.flags & DTOA_MINUS)
             {
               sign = '-';
             }
@@ -816,11 +800,6 @@ flt_oper:
 
                   if (--n < -prec)
                     {
-                      if ((flags & FL_ALT) != 0 && n == -1)
-                        {
-                          stream_putc('.', stream);
-                        }
-
                       break;
                     }
 
@@ -835,6 +814,11 @@ flt_oper:
                 }
 
               stream_putc(out, stream);
+
+              if ((flags & FL_ALT) != 0 && n == -1)
+                {
+                  stream_putc('.', stream);
+                }
             }
           else
             {
@@ -876,7 +860,13 @@ flt_oper:
                 }
 
               stream_putc(ndigs, stream);
-              c = __ultoa_invert(exp, (FAR char *)buf, 10) - (FAR char *)buf;
+              c = __ultoa_invert(exp, buf, 10) - buf;
+
+              if (exp >= 0 && exp <= 9)
+                {
+                  stream_putc('0', stream);
+                }
+
               while (c > 0)
                 {
                   stream_putc(buf[c - 1], stream);
@@ -914,7 +904,7 @@ flt_oper:
 #else
           buf[0] = va_arg(ap, int);
 #endif
-          pnt = (FAR char *)buf;
+          pnt = buf;
           size = 1;
           goto str_lpad;
 
@@ -923,7 +913,7 @@ flt_oper:
 #ifdef CONFIG_LIBC_NUMBERED_ARGS
           if ((flags & FL_ARGNUMBER) != 0)
             {
-              pnt = (FAR char *)arglist[argnumber - 1].value.cp;
+              pnt = arglist[argnumber - 1].value.cp;
             }
           else
             {
@@ -1038,7 +1028,7 @@ str_lpad:
 #if !defined(CONFIG_LIBC_LONG_LONG) && defined(CONFIG_HAVE_LONG_LONG)
               DEBUGASSERT(x >= 0 && x <= ULONG_MAX);
 #endif
-              c = __ultoa_invert(x, (FAR char *)buf, 10) - (FAR char *)buf;
+              c = __ultoa_invert(x, buf, 10) - buf;
             }
         }
       else
@@ -1159,9 +1149,11 @@ str_lpad:
 
                           if (c == 'S')
                             {
-                              sprintf_internal(stream, "+%#tx/%#zx",
-                                               addr - symbol->sym_value,
-                                               symbolsize);
+                              total_len +=
+                              lib_sprintf_internal(stream,
+                                                   "+%#tx/%#zx",
+                                                   addr - symbol->sym_value,
+                                                   symbolsize);
                             }
 
                           continue;
@@ -1212,7 +1204,7 @@ str_lpad:
 #if !defined(CONFIG_LIBC_LONG_LONG) && defined(CONFIG_HAVE_LONG_LONG)
               DEBUGASSERT(x <= ULONG_MAX);
 #endif
-              c = __ultoa_invert(x, (FAR char *)buf, base) - (FAR char *)buf;
+              c = __ultoa_invert(x, buf, base) - buf;
             }
 
           flags &= ~FL_NEGATIVE;
@@ -1372,4 +1364,43 @@ int lib_vsprintf(FAR struct lib_outstream_s *stream,
 #else
   return vsprintf_internal(stream, NULL, 0, fmt, ap);
 #endif
+}
+
+/****************************************************************************
+ * Name: lib_sprintf_internal
+ *
+ * Description:
+ *   This function does not take numbered arguments in printf.
+ *   Equivalent to lib_sprintf when CONFIG_LIBC_NUMBERED_ARGS is not enabled
+ *
+ ****************************************************************************/
+
+int lib_sprintf_internal(FAR struct lib_outstream_s *stream,
+                         FAR const IPTR char *fmt, ...)
+{
+  va_list ap;
+  int     n;
+
+  /* Then let vsprintf_internal do the real work */
+
+  va_start(ap, fmt);
+  n = vsprintf_internal(stream, NULL, 0, fmt, ap);
+  va_end(ap);
+
+  return n;
+}
+
+/****************************************************************************
+ * Name: lib_vsprintf_internal
+ *
+ * Description:
+ *   This function does not take numbered arguments in printf.
+ *   Equivalent to lib_sprintf when CONFIG_LIBC_NUMBERED_ARGS is not enabled
+ *
+ ****************************************************************************/
+
+int lib_vsprintf_internal(FAR struct lib_outstream_s *stream,
+                          FAR const IPTR char *fmt, va_list ap)
+{
+  return vsprintf_internal(stream, NULL, 0, fmt, ap);
 }

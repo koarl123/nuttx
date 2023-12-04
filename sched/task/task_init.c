@@ -33,6 +33,7 @@
 #include <nuttx/arch.h>
 #include <nuttx/queue.h>
 #include <nuttx/sched.h>
+#include <nuttx/trace.h>
 
 #include "sched/sched.h"
 #include "environ/environ.h"
@@ -85,10 +86,13 @@
 int nxtask_init(FAR struct task_tcb_s *tcb, const char *name, int priority,
                 FAR void *stack, uint32_t stack_size,
                 main_t entry, FAR char * const argv[],
-                FAR char * const envp[])
+                FAR char * const envp[],
+                FAR const posix_spawn_file_actions_t *actions)
 {
   uint8_t ttype = tcb->cmn.flags & TCB_FLAG_TTYPE_MASK;
   int ret;
+
+  sched_trace_begin();
 
 #ifndef CONFIG_DISABLE_PTHREAD
   /* Only tasks and kernel threads can be initialized in this way */
@@ -97,12 +101,11 @@ int nxtask_init(FAR struct task_tcb_s *tcb, const char *name, int priority,
 #endif
 
 #ifdef CONFIG_ARCH_ADDRENV
-  /* Allocate address environment for the task */
+  /* Kernel threads do not own any address environment */
 
-  ret = addrenv_allocate(&tcb->cmn, tcb->cmn.flags);
-  if (ret < 0)
+  if ((ttype & TCB_FLAG_TTYPE_MASK) == TCB_FLAG_TTYPE_KERNEL)
     {
-      return ret;
+      tcb->cmn.addrenv_own = NULL;
     }
 #endif
 
@@ -111,7 +114,8 @@ int nxtask_init(FAR struct task_tcb_s *tcb, const char *name, int priority,
   ret = group_allocate(tcb, tcb->cmn.flags);
   if (ret < 0)
     {
-      goto errout_with_addrenv;
+      sched_trace_end();
+      return ret;
     }
 
   /* Duplicate the parent tasks environment */
@@ -124,7 +128,7 @@ int nxtask_init(FAR struct task_tcb_s *tcb, const char *name, int priority,
 
   /* Associate file descriptors with the new task */
 
-  ret = group_setuptaskfiles(tcb);
+  ret = group_setuptaskfiles(tcb, actions, true);
   if (ret < 0)
     {
       goto errout_with_group;
@@ -176,6 +180,7 @@ int nxtask_init(FAR struct task_tcb_s *tcb, const char *name, int priority,
   /* Now we have enough in place that we can join the group */
 
   group_initialize(tcb);
+  sched_trace_end();
   return ret;
 
 errout_with_group:
@@ -201,10 +206,7 @@ errout_with_group:
 
   group_leave(&tcb->cmn);
 
-errout_with_addrenv:
-#ifdef CONFIG_ARCH_ADDRENV
-  addrenv_free(&tcb->cmn);
-#endif
+  sched_trace_end();
   return ret;
 }
 

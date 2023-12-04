@@ -25,10 +25,14 @@
 #include <nuttx/config.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/binfmt/binfmt.h>
 #include <nuttx/board.h>
 #include <nuttx/irq.h>
 #include <nuttx/tls.h>
-
+#include <nuttx/signal.h>
+#ifdef CONFIG_ARCH_LEDS
+#  include <arch/board/board.h>
+#endif
 #include <nuttx/panic_notifier.h>
 #include <nuttx/reboot_notifier.h>
 #include <nuttx/syslog/syslog.h>
@@ -47,6 +51,8 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
+#define DEADLOCK_MAX 8
 
 #ifndef CONFIG_BOARD_RESET_ON_ASSERT
 #  define CONFIG_BOARD_RESET_ON_ASSERT 0
@@ -68,7 +74,15 @@
  * Private Data
  ****************************************************************************/
 
-static uint8_t g_last_regs[XCPTCONTEXT_SIZE];
+static uintptr_t g_last_regs[XCPTCONTEXT_REGS] aligned_data(16);
+
+#ifdef CONFIG_BOARD_COREDUMP
+static struct lib_syslogstream_s  g_syslogstream;
+static struct lib_hexdumpstream_s g_hexstream;
+#  ifdef CONFIG_BOARD_COREDUMP_COMPRESSION
+static struct lib_lzfoutstream_s  g_lzfstream;
+#  endif
+#endif
 
 static FAR const char *g_policy[4] =
 {
@@ -137,92 +151,135 @@ static void stack_dump(uintptr_t sp, uintptr_t stack_top)
  ****************************************************************************/
 
 static void dump_stack(FAR const char *tag, uintptr_t sp,
-                       uintptr_t base, size_t size,
-                       size_t used, bool force)
+                       uintptr_t base, size_t size, size_t used)
 {
   uintptr_t top = base + size;
 
   _alert("%s Stack:\n", tag);
-  _alert("sp:     %p\n", (FAR void *)sp);
   _alert("  base: %p\n", (FAR void *)base);
   _alert("  size: %08zu\n", size);
 
-  if (sp >= base && sp < top)
+  if (sp != 0)
     {
+      _alert("    sp: %p\n", (FAR void *)sp);
       stack_dump(sp, top);
     }
   else
     {
-      _alert("ERROR: %s Stack pointer is not within the stack\n", tag);
-
-      if (force)
-        {
 #ifdef CONFIG_STACK_COLORATION
-          size_t remain = size - used;
+      size_t remain = size - used;
 
-          base += remain;
-          size -= remain;
+      base += remain;
+      size -= remain;
 #endif
 
 #if CONFIG_ARCH_STACKDUMP_MAX_LENGTH > 0
-          if (size > CONFIG_ARCH_STACKDUMP_MAX_LENGTH)
-            {
-              size = CONFIG_ARCH_STACKDUMP_MAX_LENGTH;
-            }
+      if (size > CONFIG_ARCH_STACKDUMP_MAX_LENGTH)
+        {
+          size = CONFIG_ARCH_STACKDUMP_MAX_LENGTH;
+        }
 #endif
 
-          stack_dump(base, base + size);
-        }
+      stack_dump(base, base + size);
     }
 }
 
 /****************************************************************************
- * Name: showstacks
+ * Name: dump_stacks
  ****************************************************************************/
 
-static void show_stacks(FAR struct tcb_s *rtcb)
+static void dump_stacks(FAR struct tcb_s *rtcb, uintptr_t sp)
 {
-  uintptr_t sp = up_getsp();
-
-  /* Get the limits on the interrupt stack memory */
+#if CONFIG_ARCH_INTERRUPTSTACK > 0
+  uintptr_t intstack_base = up_get_intstackbase();
+  size_t intstack_size = CONFIG_ARCH_INTERRUPTSTACK;
+  uintptr_t intstack_top = intstack_base + intstack_size;
+  uintptr_t intstack_sp = 0;
+#endif
+#ifdef CONFIG_ARCH_KERNEL_STACK
+  uintptr_t kernelstack_base = (uintptr_t)rtcb->xcp.kstack;
+  size_t kernelstack_size = CONFIG_ARCH_KERNEL_STACKSIZE;
+  uintptr_t kernelstack_top = kernelstack_base + kernelstack_size;
+  uintptr_t kernelstack_sp = 0;
+#endif
+  uintptr_t tcbstack_base = (uintptr_t)rtcb->stack_base_ptr;
+  size_t tcbstack_size = (size_t)rtcb->adj_stack_size;
+  uintptr_t tcbstack_top = tcbstack_base + tcbstack_size;
+  uintptr_t tcbstack_sp = 0;
+  bool force = false;
 
 #if CONFIG_ARCH_INTERRUPTSTACK > 0
-  dump_stack("IRQ", sp,
-             up_get_intstackbase(),
-             CONFIG_ARCH_INTERRUPTSTACK,
-#  ifdef CONFIG_STACK_COLORATION
-             up_check_intstack(),
-#  else
-             0,
-#  endif
-             up_interrupt_context());
-  if (up_interrupt_context())
+  if (sp >= intstack_base && sp < intstack_top)
     {
-      sp = up_getusrsp();
+      intstack_sp = sp;
+    }
+  else
+#endif
+#ifdef CONFIG_ARCH_KERNEL_STACK
+  if (sp >= kernelstack_base && sp < kernelstack_top)
+    {
+      kernelstack_sp = sp;
+    }
+  else
+#endif
+  if (sp >= tcbstack_base && sp < tcbstack_top)
+    {
+      tcbstack_sp = sp;
+    }
+  else
+    {
+      force = true;
+      _alert("ERROR: Stack pointer is not within the stack\n");
+    }
+
+#if CONFIG_ARCH_INTERRUPTSTACK > 0
+  if (intstack_sp != 0 || force)
+    {
+      dump_stack("IRQ",
+                 intstack_sp,
+                 intstack_base,
+                 intstack_size,
+#ifdef CONFIG_STACK_COLORATION
+                 up_check_intstack()
+#else
+                 0
+#endif
+                 );
+
+      tcbstack_sp = up_getusrsp((FAR void *)CURRENT_REGS);
+      if (tcbstack_sp < tcbstack_base || tcbstack_sp >= tcbstack_top)
+        {
+          tcbstack_sp = 0;
+          force = true;
+        }
     }
 #endif
 
-  dump_stack("User", sp,
-             (uintptr_t)rtcb->stack_base_ptr,
-             (size_t)rtcb->adj_stack_size,
-#ifdef CONFIG_STACK_COLORATION
-             up_check_tcbstack(rtcb),
-#else
-             0,
-#endif
 #ifdef CONFIG_ARCH_KERNEL_STACK
-             false
-#else
-             true
+  if (kernelstack_sp != 0 || force)
+    {
+      dump_stack("Kernel",
+                 kernelstack_sp,
+                 kernelstack_base,
+                 kernelstack_size,
+                 0
+                );
+    }
 #endif
-            );
 
-#ifdef CONFIG_ARCH_KERNEL_STACK
-  dump_stack("Kernel", sp,
-             (uintptr_t)rtcb->xcp.kstack,
-             CONFIG_ARCH_KERNEL_STACKSIZE,
-             0, false);
+  if (tcbstack_sp != 0 || force)
+    {
+      dump_stack("User",
+                 tcbstack_sp,
+                 tcbstack_base,
+                 tcbstack_size,
+#ifdef CONFIG_STACK_COLORATION
+                 up_check_tcbstack(rtcb)
+#else
+                 0
 #endif
+                 );
+    }
 }
 
 #endif
@@ -240,7 +297,7 @@ static void dump_task(FAR struct tcb_s *tcb, FAR void *arg)
   size_t stack_filled = 0;
   size_t stack_used;
 #endif
-#ifdef CONFIG_SCHED_CPULOAD
+#ifndef CONFIG_SCHED_CPULOAD_NONE
   struct cpuload_s cpuload;
   size_t fracpart = 0;
   size_t intpart = 0;
@@ -284,15 +341,15 @@ static void dump_task(FAR struct tcb_s *tcb, FAR void *arg)
 #ifdef CONFIG_SMP
          "  %4d"
 #endif
-         " %3d %-8s %-7s %c%c%c"
+         " %3d %-8s %-7s %c"
          " %-18s"
-         " %08" PRIx32
+         " " SIGSET_FMT
          " %p"
          "   %7zu"
 #ifdef CONFIG_STACK_COLORATION
          "   %7zu   %3zu.%1zu%%%c"
 #endif
-#ifdef CONFIG_SCHED_CPULOAD
+#ifndef CONFIG_SCHED_CPULOAD_NONE
          "   %3zu.%01zu%%"
 #endif
          "   %s%s\n"
@@ -306,11 +363,9 @@ static void dump_task(FAR struct tcb_s *tcb, FAR void *arg)
                     TCB_FLAG_POLICY_SHIFT]
          , g_ttypenames[(tcb->flags & TCB_FLAG_TTYPE_MASK)
                         >> TCB_FLAG_TTYPE_SHIFT]
-         , tcb->flags & TCB_FLAG_NONCANCELABLE ? 'N' : '-'
-         , tcb->flags & TCB_FLAG_CANCEL_PENDING ? 'P' : '-'
          , tcb->flags & TCB_FLAG_EXIT_PROCESSING ? 'P' : '-'
          , state
-         , tcb->sigprocmask
+         , SIGSET_ELEM(&tcb->sigprocmask)
          , tcb->stack_base_ptr
          , tcb->adj_stack_size
 #ifdef CONFIG_STACK_COLORATION
@@ -318,7 +373,7 @@ static void dump_task(FAR struct tcb_s *tcb, FAR void *arg)
          , stack_filled / 10, stack_filled % 10
          , (stack_filled >= 10 * 80 ? '!' : ' ')
 #endif
-#ifdef CONFIG_SCHED_CPULOAD
+#ifndef CONFIG_SCHED_CPULOAD_NONE
          , intpart, fracpart
 #endif
 #if CONFIG_TASK_NAME_SIZE > 0
@@ -342,10 +397,10 @@ static void dump_backtrace(FAR struct tcb_s *tcb, FAR void *arg)
 #endif
 
 /****************************************************************************
- * Name: showtasks
+ * Name: dump_tasks
  ****************************************************************************/
 
-static void show_tasks(void)
+static void dump_tasks(void)
 {
 #if CONFIG_ARCH_INTERRUPTSTACK > 0 && defined(CONFIG_STACK_COLORATION)
   size_t stack_used = up_check_intstack();
@@ -368,13 +423,13 @@ static void show_tasks(void)
 #endif
          " PRI POLICY   TYPE    NPX"
          " STATE   EVENT"
-         "      SIGMASK"
+         "      SIGMASK        "
          "  STACKBASE"
          "  STACKSIZE"
 #ifdef CONFIG_STACK_COLORATION
          "      USED   FILLED "
 #endif
-#ifdef CONFIG_SCHED_CPULOAD
+#ifndef CONFIG_SCHED_CPULOAD_NONE
          "      CPU"
 #endif
          "   COMMAND\n");
@@ -387,13 +442,13 @@ static void show_tasks(void)
          " --- --------"
          " ------- ---"
          " ------- ----------"
-         " --------"
+         " ----------------"
          " %p"
          "   %7u"
 #  ifdef CONFIG_STACK_COLORATION
          "   %7zu   %3zu.%1zu%%%c"
 #  endif
-#  ifdef CONFIG_SCHED_CPULOAD
+#  ifndef CONFIG_SCHED_CPULOAD_NONE
          "     ----"
 #  endif
          "   irq\n"
@@ -415,30 +470,142 @@ static void show_tasks(void)
 }
 
 /****************************************************************************
+ * Name: dump_core
+ ****************************************************************************/
+
+#ifdef CONFIG_BOARD_COREDUMP
+static void dump_core(pid_t pid)
+{
+  FAR void *stream;
+  int logmask;
+
+  logmask = setlogmask(LOG_ALERT);
+
+  _alert("Start coredump:\n");
+
+  /* Initialize hex output stream */
+
+  lib_syslogstream(&g_syslogstream, LOG_EMERG);
+
+  stream = &g_syslogstream;
+
+  lib_hexdumpstream(&g_hexstream, stream);
+
+  stream = &g_hexstream;
+
+#  ifdef CONFIG_BOARD_COREDUMP_COMPRESSION
+
+  /* Initialize LZF compression stream */
+
+  lib_lzfoutstream(&g_lzfstream, stream);
+  stream = &g_lzfstream;
+
+#  endif
+
+  /* Do core dump */
+
+  core_dump(NULL, stream, pid);
+
+#  ifdef CONFIG_BOARD_COREDUMP_COMPRESSION
+  _alert("Finish coredump (Compression Enabled).\n");
+#  else
+  _alert("Finish coredump.\n");
+#  endif
+
+  setlogmask(logmask);
+}
+#endif
+
+/****************************************************************************
+ * Name: dump_deadlock
+ ****************************************************************************/
+
+#ifdef CONFIG_ARCH_DEADLOCKDUMP
+static void dump_deadlock(void)
+{
+  pid_t deadlock[DEADLOCK_MAX];
+  size_t i = nxsched_collect_deadlock(deadlock, DEADLOCK_MAX);
+
+  if (i > 0)
+    {
+      _alert("Deadlock detected\n");
+      while (i-- > 0)
+        {
+#ifdef CONFIG_SCHED_BACKTRACE
+          sched_dumpstack(deadlock[i]);
+#else
+          _alert("deadlock pid: %d\n", deadlock[i]);
+#endif
+        }
+    }
+}
+#endif
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
-void _assert(FAR const char *filename, int linenum, FAR const char *msg)
+/****************************************************************************
+ * Name: _assert
+ ****************************************************************************/
+
+void _assert(FAR const char *filename, int linenum,
+             FAR const char *msg, FAR void *regs)
 {
   FAR struct tcb_s *rtcb = running_task();
+#if CONFIG_TASK_NAME_SIZE > 0
+  FAR struct tcb_s *ptcb = NULL;
+#endif
+  struct panic_notifier_s notifier_data;
   struct utsname name;
-  bool fatal = false;
+  bool fatal = true;
+  int flags;
+
+#if CONFIG_TASK_NAME_SIZE > 0
+  if (rtcb->group && !(rtcb->flags & TCB_FLAG_TTYPE_KERNEL))
+    {
+      ptcb = nxsched_get_tcb(rtcb->group->tg_pid);
+    }
+#endif
+
+  flags = enter_critical_section();
+
+  sched_lock();
+
+  /* try to save current context if regs is null */
+
+  if (regs == NULL)
+    {
+      up_saveusercontext(g_last_regs);
+      regs = g_last_regs;
+    }
+  else
+    {
+      memcpy(g_last_regs, regs, sizeof(g_last_regs));
+    }
+
+#if CONFIG_BOARD_RESET_ON_ASSERT < 2
+  if (!up_interrupt_context() &&
+      (rtcb->flags & TCB_FLAG_TTYPE_MASK) != TCB_FLAG_TTYPE_KERNEL)
+    {
+      fatal = false;
+    }
+#endif
+
+  notifier_data.rtcb = rtcb;
+  notifier_data.regs = regs;
+  notifier_data.filename = filename;
+  notifier_data.linenum = linenum;
+  notifier_data.msg = msg;
+  panic_notifier_call_chain(fatal ? PANIC_KERNEL : PANIC_TASK,
+                            &notifier_data);
+#ifdef CONFIG_ARCH_LEDS
+  board_autoled_on(LED_ASSERTION);
+#endif
 
   /* Flush any buffered SYSLOG data (from prior to the assertion) */
 
   syslog_flush();
-
-#if CONFIG_BOARD_RESET_ON_ASSERT < 2
-  if (up_interrupt_context() ||
-      (rtcb->flags & TCB_FLAG_TTYPE_MASK) == TCB_FLAG_TTYPE_KERNEL)
-    {
-      fatal = true;
-    }
-#else
-  fatal = true;
-#endif
-
-  panic_notifier_call_chain(fatal ? PANIC_KERNEL : PANIC_TASK, rtcb);
 
   uname(&name);
   _alert("Current Version: %s %s %s %s %s\n",
@@ -452,6 +619,7 @@ void _assert(FAR const char *filename, int linenum, FAR const char *msg)
          ": "
 #if CONFIG_TASK_NAME_SIZE > 0
          "%s "
+         "process: %s "
 #endif
          "%p\n",
          msg ? msg : "",
@@ -461,29 +629,22 @@ void _assert(FAR const char *filename, int linenum, FAR const char *msg)
 #endif
 #if CONFIG_TASK_NAME_SIZE > 0
          rtcb->name,
+         ptcb ? ptcb->name : "Kernel",
 #endif
          rtcb->entry.main);
+
+  /* Register dump */
+
+  up_dump_register(regs);
+
+#ifdef CONFIG_ARCH_STACKDUMP
+  dump_stacks(rtcb, up_getusrsp(regs));
+#endif
 
   /* Show back trace */
 
 #ifdef CONFIG_SCHED_BACKTRACE
   sched_dumpstack(rtcb->pid);
-#endif
-
-  /* Register dump */
-
-  if (up_interrupt_context())
-    {
-      up_dump_register(NULL);
-    }
-  else
-    {
-      up_saveusercontext(g_last_regs);
-      up_dump_register(g_last_regs);
-    }
-
-#ifdef CONFIG_ARCH_STACKDUMP
-  show_stacks(rtcb);
 #endif
 
   /* Flush any buffered SYSLOG data */
@@ -492,7 +653,13 @@ void _assert(FAR const char *filename, int linenum, FAR const char *msg)
 
   if (fatal)
     {
-      show_tasks();
+      dump_tasks();
+
+#ifdef CONFIG_ARCH_DEADLOCKDUMP
+      /* Deadlock Dump */
+
+      dump_deadlock();
+#endif
 
 #ifdef CONFIG_ARCH_USBDUMP
       /* Dump USB trace data */
@@ -501,33 +668,44 @@ void _assert(FAR const char *filename, int linenum, FAR const char *msg)
 #endif
 
 #ifdef CONFIG_BOARD_CRASHDUMP
-      board_crashdump(up_getsp(), rtcb, filename, linenum, msg);
+      board_crashdump(up_getsp(), rtcb, filename, linenum, msg, regs);
+
+#elif defined(CONFIG_BOARD_COREDUMP)
+      /* Dump core information */
+
+#  ifdef CONFIG_BOARD_COREDUMP_FULL
+      dump_core(INVALID_PROCESS_ID);
+#  else
+      dump_core(rtcb->pid);
+#  endif
+
 #endif
 
       /* Flush any buffered SYSLOG data */
 
       syslog_flush();
-      panic_notifier_call_chain(PANIC_KERNEL_FINAL, rtcb);
+      panic_notifier_call_chain(PANIC_KERNEL_FINAL, &notifier_data);
 
       reboot_notifier_call_chain(SYS_HALT, NULL);
 
 #if CONFIG_BOARD_RESET_ON_ASSERT >= 1
       board_reset(CONFIG_BOARD_ASSERT_RESET_VALUE);
 #else
-      /* Disable interrupts on this CPU */
-
-      up_irq_save();
-
-#  ifdef CONFIG_SMP
-      /* Try (again) to stop activity on other CPUs */
-
-      spin_trylock(&g_cpu_irqlock);
-#  endif
-
       for (; ; )
         {
+#ifdef CONFIG_ARCH_LEDS
+          /* FLASH LEDs a 2Hz */
+
+          board_autoled_on(LED_PANIC);
+          up_mdelay(250);
+          board_autoled_off(LED_PANIC);
+#endif
           up_mdelay(250);
         }
 #endif
     }
+
+  sched_unlock();
+
+  leave_critical_section(flags);
 }

@@ -24,6 +24,10 @@ ifeq ($(CONFIG_NET),y)
 
 # Include network interface drivers
 
+ifeq ($(CONFIG_MM_IOB),y)
+  CSRCS += netdev_upperhalf.c
+endif
+
 ifeq ($(CONFIG_NET_LOOPBACK),y)
   CSRCS += loopback.c
 endif
@@ -74,6 +78,15 @@ endif
 
 ifeq ($(CONFIG_ARCH_PHY_INTERRUPT),y)
   CSRCS += phy_notify.c
+endif
+
+ifeq ($(CONFIG_NET_KSZ9477),y)
+  CSRCS += ksz9477.c
+
+ifeq ($(CONFIG_NET_KSZ9477_I2C),y)
+  CSRCS += ksz9477_i2c.c
+endif
+
 endif
 
 # Include network build support

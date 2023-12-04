@@ -116,6 +116,10 @@ void igmp_send(FAR struct net_driver_s *dev, FAR struct igmp_group_s *group,
       return;
     }
 
+  /* Select IPv4 */
+
+  IFF_SET_IPv4(dev->d_flags);
+
   /* The IGMP header immediately follows the IP header */
 
   iphdrlen          = IPv4_HDRLEN + RASIZE;
@@ -129,7 +133,7 @@ void igmp_send(FAR struct net_driver_s *dev, FAR struct igmp_group_s *group,
 
   /* Update device buffer length */
 
-  iob_update_pktlen(dev->d_iob, dev->d_len);
+  iob_update_pktlen(dev->d_iob, dev->d_len, false);
 
   /* The total size of the data is the size of the IGMP header */
 

@@ -172,19 +172,23 @@ struct sam_sample_s
 
 struct sam_tsd_s
 {
-  uint8_t nwaiters;             /* Number of threads waiting for touchscreen data */
-  uint8_t id;                   /* Current touch point ID */
-  uint8_t valid;                /* Data ready bit set */
-  uint8_t crefs;                /* The number of times the device has been opened */
-  volatile bool penchange;      /* An unreported event is buffered */
-  uint32_t threshx;             /* Thresholding X value */
-  uint32_t threshy;             /* Thresholding Y value */
-  sem_t waitsem;                /* Used to wait for the availability of data */
+  uint8_t              nwaiters;  /* Num threads waiting for TSD data */
+  uint8_t              id;        /* Current touch point ID */
+  uint8_t              valid;     /* Data ready bit set */
+  uint8_t              crefs;     /* Number of times device opened */
+  volatile bool        penchange; /* An unreported event is buffered */
+  uint32_t             threshx;   /* Thresholding X value */
+  uint32_t             threshy;   /* Thresholding Y value */
+  sem_t                waitsem;   /* Used to wait for data available */
 
-  struct sam_adc_s *adc;        /* ADC device handle */
-  struct work_s work;           /* Supports the interrupt handling "bottom half" */
-  struct sam_sample_s sample;   /* Last sampled touch point data */
-  struct wdog_s wdog;           /* Poll the position while the pen is down */
+  struct sam_adc_s     *adc;      /* ADC device handle */
+  struct work_s        work;      /* Supports int. handling "bottom half" */
+  struct sam_sample_s  sample;    /* Last sampled touch point data */
+  struct wdog_s        wdog;      /* Poll position while the pen is down */
+  struct g_tscaldata_s caldata;   /* Touchscreen Calibration Data */
+  bool                 scaled;    /* Character dreiver read should return
+                                   * scaled values (true) or not (false).
+                                   */
 
   /* The following is a list if poll structures of threads waiting for
    * driver events. The 'struct pollfd' reference for each open is also
@@ -202,9 +206,9 @@ struct sam_tsd_s
 
 static void sam_tsd_notify(struct sam_tsd_s *priv);
 static int  sam_tsd_sample(struct sam_tsd_s *priv,
-              struct sam_sample_s *sample);
+                           struct sam_sample_s *sample);
 static int  sam_tsd_waitsample(struct sam_tsd_s *priv,
-              struct sam_sample_s *sample);
+                               struct sam_sample_s *sample);
 static void sam_tsd_bottomhalf(void *arg);
 static int  sam_tsd_schedule(struct sam_tsd_s *priv);
 static void sam_tsd_expiry(wdparm_t arg);
@@ -296,7 +300,7 @@ static int sam_tsd_sample(struct sam_tsd_s *priv,
   irqstate_t flags;
   int ret = -EAGAIN;
 
-  /* Interrupts me be disabled when this is called to (1) prevent posting
+  /* Interrupts must be disabled when this is called to (1) prevent posting
    * of semaphores from interrupt handlers, and (2) to prevent sampled data
    * from changing until it has been reported.
    */
@@ -350,15 +354,11 @@ static int sam_tsd_waitsample(struct sam_tsd_s *priv,
   irqstate_t flags;
   int ret = 0;
 
-  /* Interrupts me be disabled when this is called to (1) prevent posting
+  /* Interrupts must be disabled when this is called to (1) prevent posting
    * of semaphores from interrupt handlers, and (2) to prevent sampled data
    * from changing until it has been reported.
-   *
-   * In addition, we will also disable pre-emption to prevent other threads
-   * from getting control while we muck with the semaphores.
    */
 
-  sched_lock();
   flags = enter_critical_section();
 
   /* Now release the semaphore that manages mutually exclusive access to
@@ -404,14 +404,6 @@ errout:
    */
 
   leave_critical_section(flags);
-
-  /* Restore pre-emption.  We might get suspended here but that is okay
-   * because we already have our sample.  Note:  this means that if there
-   * were two threads reading from the touchscreen ADC for some reason, the
-   * data might be read out of order.
-   */
-
-  sched_unlock();
   return ret;
 }
 
@@ -617,35 +609,22 @@ static void sam_tsd_bottomhalf(void *arg)
 
           ier &= ~(pending & TSD_ALLREADY);
 
-          /* datasheet suggests that if TSAV != 0 there may not be interrupts
+          /* datasheet says that if TSAV != 0 there may not be interrupts
            * for TSD channels so periodic or continuous triggers are needed
-           *
-           * Testing suggests otherwise, so periodic is used regardless.
+           * unless we're already using periodic triggers (for std adc ops).
            */
-#if 0
+#ifdef SAMA5_TSD_PENDET_TRIG_ALLOWED
           regval  = sam_adc_getreg(priv->adc, SAM_ADC_TSMR);
           regval &= ADC_TSMR_TSAV_MASK;
           if ((regval & ADC_TSMR_TSAV_MASK) != 0)
-#endif
-#ifdef SAMA5_TSD_PENDET_TRIG_ALLOWED
             {
-              regval  = sam_adc_getreg(priv->adc, SAM_ADC_TRGR);
+              regval = sam_adc_getreg(priv->adc, SAM_ADC_TRGR);
 
-              if ((regval & ADC_TRGR_TRGMOD_MASK) == ADC_TRGR_TRGMOD_PEN)
-                {
-                  /* Configure for periodic trigger */
+              /* Configure for periodic trigger */
 
-                  regval &= ~ADC_TRGR_TRGMOD_MASK;
-                  regval |= ADC_TRGR_TRGMOD_PERIOD;
-                  sam_adc_putreg(priv->adc, SAM_ADC_TRGR, regval);
-                }
-              else
-                {
-                  regval  = sam_adc_getreg(priv->adc, SAM_ADC_TRGR);
-                  regval &= ~ADC_TRGR_TRGMOD_MASK;
-                  regval |= ADC_TRGR_TRGMOD_PEN;
-                  sam_adc_putreg(priv->adc, SAM_ADC_TRGR, regval);
-                }
+              regval &= ~ADC_TRGR_TRGMOD_MASK;
+              regval |= ADC_TRGR_TRGMOD_PERIOD;
+              sam_adc_putreg(priv->adc, SAM_ADC_TRGR, regval);
             }
 #endif
 
@@ -689,11 +668,11 @@ static void sam_tsd_bottomhalf(void *arg)
        */
 
 #ifdef CONFIG_SAMA5_TSD_SWAPXY
-      x  = ((yraw << 12) - yraw) / yscale;
-      y  = ((xraw << 12) - xraw) / xscale;
+      x  = ((yraw << 12)) / yscale;
+      y  = ((xraw << 12)) / xscale;
 #else
-      x  = ((xraw << 12) - xraw) / xscale;
-      y  = ((yraw << 12) - yraw) / yscale;
+      x  = ((xraw << 12)) / xscale;
+      y  = ((yraw << 12)) / yscale;
 #endif
 
       /* Perform a thresholding operation so that the results will be
@@ -744,10 +723,8 @@ static void sam_tsd_bottomhalf(void *arg)
        * resistance (Rxp). Three conversions (Xpos, Z1, Z2) are
        * necessary to determine the value of Rp (Zaxis resistance).
        *
-       *   Rp = Rxp * (X / 1024) * [(Z2 / Z1) - 1]
+       *   Rp = Rxp * (Xpos / 1024) * [(Z2 / Z1) - 1]
        *
-       * Revisited. The ADC is 12 bit not 10 so datasheet is presumed
-       * incorrect. Formula corrected to cope with uint arithmetic.
        */
 
       z2 = (pressr & ADC_PRESSR_Z2_MASK) >> ADC_PRESSR_Z2_SHIFT;
@@ -755,14 +732,10 @@ static void sam_tsd_bottomhalf(void *arg)
 
       if (z1 != 0)
         {
-          p = CONFIG_SAMA_TSD_RXP * xraw * (z2 - z1) / (z1 * 4096);
-        }
-      else
-        {
-          p = 4096;
+          p = CONFIG_SAMA_TSD_RXP * xraw * (z2 - z1) / (z1 * 1024);
         }
 
-      priv->sample.p = MIN(p, 4096);
+      priv->sample.p = UINT16_MAX - MIN(p, UINT16_MAX);
 #endif
 
       /* The X/Y positional data is now valid */
@@ -966,11 +939,10 @@ static ssize_t sam_tsd_read(struct file *filep, char *buffer, size_t len)
   int ret;
 
   iinfo("buffer:%p len:%d\n", buffer, len);
-  DEBUGASSERT(filep);
   inode = filep->f_inode;
 
-  DEBUGASSERT(inode && inode->i_private);
-  priv = (struct sam_tsd_s *)inode->i_private;
+  DEBUGASSERT(inode->i_private);
+  priv = inode->i_private;
 
   /* Verify that the caller has provided a buffer large enough to receive
    * the touch data.
@@ -1025,10 +997,22 @@ static ssize_t sam_tsd_read(struct file *filep, char *buffer, size_t len)
 
   report = (struct touch_sample_s *)buffer;
   memset(report, 0, SIZEOF_TOUCH_SAMPLE_S(1));
-  report->npoints           = 1;
-  report->point[0].id       = sample.id;
-  report->point[0].x        = sample.x;
-  report->point[0].y        = sample.y;
+  report->npoints        = 1;
+  report->point[0].id    = sample.id;
+
+  if (priv->scaled)
+    {
+      report->point[0].x = SCALE_TS(itob16(sample.x), priv->caldata.offset_x,
+                                                      priv->caldata.slope_x);
+      report->point[0].y = SCALE_TS(itob16(sample.y), priv->caldata.offset_y,
+                                                      priv->caldata.slope_y);
+    }
+  else
+    {
+      report->point[0].x = sample.x;
+      report->point[0].y = sample.y;
+    }
+
 #ifdef CONFIG_SAMA5_TSD_4WIRE
   report->point[0].pressure = sample.p;
 #endif
@@ -1085,14 +1069,14 @@ static int sam_tsd_ioctl(struct file *filep, int cmd, unsigned long arg)
 {
   struct inode *inode;
   struct sam_tsd_s *priv;
-  int ret;
+  int ret = OK;
+  int regval;
 
   iinfo("cmd: %d arg: %ld\n", cmd, arg);
-  DEBUGASSERT(filep);
   inode = filep->f_inode;
 
-  DEBUGASSERT(inode && inode->i_private);
-  priv = (struct sam_tsd_s *)inode->i_private;
+  DEBUGASSERT(inode->i_private);
+  priv = inode->i_private;
 
   /* Get exclusive access to the driver data structure */
 
@@ -1102,6 +1086,30 @@ static int sam_tsd_ioctl(struct file *filep, int cmd, unsigned long arg)
 
   switch (cmd)
     {
+      case TSIOC_DOACALIB:
+        {
+          /* Initiate auto-calibration sequence */
+
+          regval = sam_adc_getreg(priv->adc, SAM_ADC_ACR);
+          regval = ADC_CR_TSCALIB | ADC_CR_START;
+          sam_adc_putreg(priv->adc, SAM_ADC_CR, regval);
+        }
+      break;
+      case TSIOC_CALDATA:
+        {
+          /* Receive calibration data for the touchscreen */
+
+          struct g_tscaldata_s *ptr =
+                               (struct g_tscaldata_s *)((uintptr_t)arg);
+          DEBUGASSERT(ptr != NULL);
+          priv->caldata = *ptr;
+        }
+        break;
+      case TSIOC_USESCALED:
+        {
+          priv->scaled = (bool)(arg);
+        }
+        break;
       default:
         ret = -ENOTTY;
         break;
@@ -1123,11 +1131,11 @@ static int sam_tsd_poll(struct file *filep, struct pollfd *fds, bool setup)
   int i;
 
   iinfo("setup: %d\n", (int)setup);
-  DEBUGASSERT(filep && fds);
+  DEBUGASSERT(fds);
   inode = filep->f_inode;
 
-  DEBUGASSERT(inode && inode->i_private);
-  priv = (struct sam_tsd_s *)inode->i_private;
+  DEBUGASSERT(inode->i_private);
+  priv = inode->i_private;
 
   /* Get exclusive access to the ADC hardware */
 
@@ -1165,8 +1173,8 @@ static int sam_tsd_poll(struct file *filep, struct pollfd *fds, bool setup)
 
       if (i >= CONFIG_SAMA5_TSD_NPOLLWAITERS)
         {
-          fds->priv    = NULL;
-          ret          = -EBUSY;
+          fds->priv = NULL;
+          ret       = -EBUSY;
           goto errout;
         }
 
@@ -1174,7 +1182,7 @@ static int sam_tsd_poll(struct file *filep, struct pollfd *fds, bool setup)
 
       if (priv->penchange)
         {
-          sam_tsd_notify(priv);
+          poll_notify(&fds, 1, POLLIN);
         }
     }
   else if (fds->priv)
@@ -1186,8 +1194,8 @@ static int sam_tsd_poll(struct file *filep, struct pollfd *fds, bool setup)
 
       /* Remove all memory of the poll setup */
 
-      *slot                = NULL;
-      fds->priv            = NULL;
+      *slot     = NULL;
+      fds->priv = NULL;
     }
 
 errout:
@@ -1571,7 +1579,6 @@ static void sam_tsd_initialize(struct sam_tsd_s *priv)
   regval &= ~ADC_TRGR_TRGMOD_MASK;
   regval |= ADC_TRGR_TRGMOD_PERIOD;
   sam_adc_putreg(priv, SAM_ADC_TRGR, regval);
-
   sam_tsd_trigperiod(priv, CONFIG_SAMA5_ADC_TRIGGER_PERIOD);
 #else
   sam_tsd_trigperiod(priv, 20000); /*  20ms */

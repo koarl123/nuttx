@@ -68,6 +68,7 @@
 
 #include <arch/barriers.h>
 
+#include "addrenv.h"
 #include "pgalloc.h"
 #include "riscv_mmu.h"
 
@@ -85,17 +86,9 @@
 
 #define ENTRIES_PER_PGT     (RV_MMU_PAGE_ENTRIES)
 
-/* Base address for address environment */
-
-#if CONFIG_ARCH_TEXT_VBASE != 0
-#  define ADDRENV_VBASE       (CONFIG_ARCH_TEXT_VBASE)
-#else
-#  define ADDRENV_VBASE       (CONFIG_ARCH_DATA_VBASE)
-#endif
-
 /* Make sure the address environment virtual address boundary is valid */
 
-static_assert((ADDRENV_VBASE & RV_MMU_SECTION_ALIGN) == 0,
+static_assert((ARCH_ADDRENV_VBASE & RV_MMU_SECTION_ALIGN) == 0,
               "Addrenv start address is not aligned to section boundary");
 
 /****************************************************************************
@@ -139,9 +132,9 @@ static void map_spgtables(arch_addrenv_t *addrenv, uintptr_t vaddr)
 
   for (i = 0; i < (ARCH_SPGTS - 1); i++)
     {
-      uintptr_t next = riscv_pgvaddr(addrenv->spgtables[i + 1]);
+      uintptr_t next = addrenv->spgtables[i + 1];
       mmu_ln_setentry(i + 1, prev, next, vaddr, MMU_UPGT_FLAGS);
-      prev = next;
+      prev = riscv_pgvaddr(next);
     }
 }
 
@@ -382,7 +375,7 @@ int up_addrenv_create(size_t textsize, size_t datasize, size_t heapsize,
   uintptr_t heapbase;
 
   DEBUGASSERT(addrenv);
-  DEBUGASSERT(MM_ISALIGNED(ADDRENV_VBASE));
+  DEBUGASSERT(MM_ISALIGNED(ARCH_ADDRENV_VBASE));
 
   /* Make sure the address environment is wiped before doing anything */
 
@@ -417,7 +410,7 @@ int up_addrenv_create(size_t textsize, size_t datasize, size_t heapsize,
   database = resvbase + MM_PGALIGNUP(resvsize);
   heapbase = CONFIG_ARCH_HEAP_VBASE;
 #else
-  resvbase = ADDRENV_VBASE;
+  resvbase = ARCH_ADDRENV_VBASE;
   resvsize = ARCH_DATA_RESERVE_SIZE;
   textbase = resvbase + MM_PGALIGNUP(resvsize);
   database = textbase + MM_PGALIGNUP(textsize);
@@ -426,7 +419,7 @@ int up_addrenv_create(size_t textsize, size_t datasize, size_t heapsize,
 
   /* Allocate 1 extra page for heap, temporary fix for #5811 */
 
-  heapsize = heapsize + MM_PGALIGNUP(1);
+  heapsize = heapsize + MM_PGALIGNUP(CONFIG_DEFAULT_TASK_STACKSIZE);
 
   /* Map the reserved area */
 
@@ -532,7 +525,7 @@ int up_addrenv_destroy(arch_addrenv_t *addrenv)
 
   /* Things start from the beginning of the user virtual memory */
 
-  vaddr  = ADDRENV_VBASE;
+  vaddr  = ARCH_ADDRENV_VBASE;
   pgsize = mmu_get_region_size(ARCH_SPGTS);
 
   /* First destroy the allocated memory and the final level page table */
@@ -542,28 +535,24 @@ int up_addrenv_destroy(arch_addrenv_t *addrenv)
     {
       for (i = 0; i < ENTRIES_PER_PGT; i++, vaddr += pgsize)
         {
-          if (vaddr_is_shm(vaddr))
-            {
-              /* Do not free memory from SHM area */
-
-              continue;
-            }
-
           ptlast = (uintptr_t *)riscv_pgvaddr(mmu_pte_to_paddr(ptprev[i]));
           if (ptlast)
             {
-              /* Page table allocated, free any allocated memory */
-
-              for (j = 0; j < ENTRIES_PER_PGT; j++)
+              if (!vaddr_is_shm(vaddr))
                 {
-                  paddr = mmu_pte_to_paddr(ptlast[j]);
-                  if (paddr)
+                  /* Free the allocated pages, but not from SHM area */
+
+                  for (j = 0; j < ENTRIES_PER_PGT; j++)
                     {
-                      mm_pgfree(paddr, 1);
+                      paddr = mmu_pte_to_paddr(ptlast[j]);
+                      if (paddr)
+                        {
+                          mm_pgfree(paddr, 1);
+                        }
                     }
                 }
 
-              /* Then free the page table itself */
+              /* Regardless, free the page table itself */
 
               mm_pgfree((uintptr_t)ptlast, 1);
             }
@@ -743,10 +732,8 @@ int up_addrenv_select(const arch_addrenv_t *addrenv)
 
 int up_addrenv_coherent(const arch_addrenv_t *addrenv)
 {
-  /* Flush the instruction and data caches */
+  /* Nothing needs to be done */
 
-  __ISB();
-  __DMB();
   return OK;
 }
 

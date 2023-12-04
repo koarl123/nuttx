@@ -42,6 +42,7 @@
 #include <nuttx/semaphore.h>
 #include <nuttx/mmcsd.h>
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 
 #include <nuttx/irq.h>
 #include <arch/board/board.h>
@@ -1473,8 +1474,12 @@ static int sam_lock(struct sdio_dev_s *dev, bool lock)
 {
   /* The multiplex bus is part of board support package. */
 
-  sam_muxbus_sdio_lock((dev - g_sdmmcdev) /
-                         sizeof(struct sam_dev_s), lock);
+  /* FIXME: Implement the below function to support bus share:
+   *
+   * sam_muxbus_sdio_lock((dev - g_sdmmcdev) /
+   *                        sizeof(struct sam_dev_s), lock);
+   */
+
   return OK;
 }
 #endif
@@ -1574,7 +1579,7 @@ static void sam_reset(struct sdio_dev_s *dev)
         }
 
       timeout_ms--;
-      usleep(100);
+      nxsig_usleep(100);
     }
 
     mcinfo("Reset complete\n");
@@ -1960,7 +1965,7 @@ static void sam_clock(struct sdio_dev_s *dev, enum sdio_clock_e rate)
 
   if (wait_microseconds > 0)
     {
-     usleep(wait_microseconds);
+     nxsig_usleep(wait_microseconds);
     }
 }
 
@@ -2670,7 +2675,7 @@ static int sam_recvshortcrc(struct sdio_dev_s *dev, uint32_t cmd,
 
   /* We need a short delay here to let the SDMMC peripheral respond */
 
-  usleep(10);
+  nxsig_usleep(10);
 
   return ret;
 }
@@ -3319,7 +3324,7 @@ static int sam_set_clock(struct sam_dev_s *priv, uint32_t clock)
         }
 
         timeout--;
-        usleep(100);
+        nxsig_usleep(100);
     }
 
   sam_putreg16(priv, 0, SAMA5_SDMMC_SYSCTL_OFFSET);
@@ -3429,7 +3434,7 @@ static int sam_set_clock(struct sam_dev_s *priv, uint32_t clock)
             }
 
           timeout--;
-          usleep(100);
+          nxsig_usleep(100);
         }
 
       /* High Speed Mode? */

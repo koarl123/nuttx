@@ -161,6 +161,7 @@ static bool uart_rpmsg_rxflowcontrol(FAR struct uart_dev_s *dev,
   FAR struct uart_rpmsg_priv_s *priv = dev->priv;
   FAR struct uart_rpmsg_wakeup_s msg;
 
+  nxmutex_lock(&priv->lock);
   if (!upper && upper != priv->last_upper)
     {
       memset(&msg, 0, sizeof(msg));
@@ -173,6 +174,7 @@ static bool uart_rpmsg_rxflowcontrol(FAR struct uart_dev_s *dev,
     }
 
   priv->last_upper = upper;
+  nxmutex_unlock(&priv->lock);
   return false;
 }
 
@@ -323,7 +325,8 @@ static void uart_rpmsg_device_created(FAR struct rpmsg_device *rdev,
   if (strcmp(priv->cpuname, rpmsg_get_cpuname(rdev)) == 0)
     {
       priv->ept.priv = dev;
-      sprintf(eptname, "%s%s", UART_RPMSG_EPT_PREFIX, priv->devname);
+      snprintf(eptname, sizeof(eptname), "%s%s",
+               UART_RPMSG_EPT_PREFIX, priv->devname);
       rpmsg_create_ept(&priv->ept, rdev, eptname,
                        RPMSG_ADDR_ANY, RPMSG_ADDR_ANY,
                        uart_rpmsg_ept_cb, NULL);
@@ -336,7 +339,8 @@ static void uart_rpmsg_device_destroy(FAR struct rpmsg_device *rdev,
   FAR struct uart_dev_s *dev = priv_;
   FAR struct uart_rpmsg_priv_s *priv = dev->priv;
 
-  if (strcmp(priv->cpuname, rpmsg_get_cpuname(rdev)) == 0)
+  if (priv->ept.priv != NULL &&
+      strcmp(priv->cpuname, rpmsg_get_cpuname(rdev)) == 0)
     {
       rpmsg_destroy_ept(&priv->ept);
     }
@@ -451,7 +455,8 @@ int uart_rpmsg_init(FAR const char *cpuname, FAR const char *devname,
     }
 
   nxmutex_init(&priv->lock);
-  sprintf(dev_name, "%s%s", UART_RPMSG_DEV_PREFIX, devname);
+  snprintf(dev_name, sizeof(dev_name), "%s%s",
+           UART_RPMSG_DEV_PREFIX, devname);
   uart_register(dev_name, dev);
 
   if (dev->isconsole)
@@ -469,15 +474,3 @@ fail:
 
   return ret;
 }
-
-#ifdef CONFIG_RPMSG_SERIALINIT
-/* Dummy function to make linker happy */
-
-void up_earlyserialinit(void)
-{
-}
-
-void up_serialinit(void)
-{
-}
-#endif /* CONFIG_RPMSG_SERIALINIT */

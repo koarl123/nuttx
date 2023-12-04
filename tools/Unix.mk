@@ -244,10 +244,17 @@ include/nuttx/version.h: $(TOPDIR)/.version tools/mkversion$(HOSTEXEEXT)
 # part of the overall NuttX configuration sequence. Notice that the
 # tools/mkconfig tool is built and used to create include/nuttx/config.h
 
-tools/mkconfig$(HOSTEXEEXT):
+tools/mkconfig$(HOSTEXEEXT): prebuild
 	$(Q) $(MAKE) -C tools -f Makefile.host mkconfig$(HOSTEXEEXT)
 
 include/nuttx/config.h: $(TOPDIR)/.config tools/mkconfig$(HOSTEXEEXT)
+	$(Q) grep -v "CONFIG_BASE_DEFCONFIG" "$(TOPDIR)/.config" > "$(TOPDIR)/.config.tmp"
+	$(Q) if ! cmp -s "$(TOPDIR)/.config.tmp" "$(TOPDIR)/.config.orig" ; then \
+		sed -i.bak -e "/CONFIG_BASE_DEFCONFIG/ { /-dirty/! s/\"$$/-dirty\"/; }" "$(TOPDIR)/.config" ; \
+	else \
+		sed -i.bak "s/-dirty//g" "$(TOPDIR)/.config"; \
+	fi
+	$(Q) rm -f "$(TOPDIR)/.config.tmp" "$(TOPDIR)/.config.bak"
 	$(Q) tools/mkconfig $(TOPDIR) > $@.tmp
 	$(Q) $(call TESTANDREPLACEFILE, $@.tmp, $@)
 
@@ -272,10 +279,18 @@ include/arch:
 	$(Q) $(DIRLINK) $(TOPDIR)/$(ARCH_DIR)/include $@
 
 # Link the boards/<arch>/<chip>/<board>/include directory to include/arch/board
+# If the above path does not exist, then we try to link to common
+
+LINK_INCLUDE_DIR=$(BOARD_DIR)/include
+ifeq ($(wildcard $(LINK_INCLUDE_DIR)),)
+	ifneq ($(strip $(BOARD_COMMON_DIR)),)
+		LINK_INCLUDE_DIR = $(BOARD_COMMON_DIR)/include
+	endif
+endif
 
 include/arch/board: | include/arch
 	@echo "LN: $@ to $(BOARD_DIR)/include"
-	$(Q) $(DIRLINK) $(BOARD_DIR)/include $@
+	$(Q) $(DIRLINK) $(LINK_INCLUDE_DIR) $@
 
 # Link the boards/<arch>/<chip>/common dir to arch/<arch-name>/src/board
 # Link the boards/<arch>/<chip>/<board>/src dir to arch/<arch-name>/src/board/board
@@ -479,6 +494,16 @@ clean_context: clean_dirlinks
 
 include tools/LibTargets.mk
 
+# prebuild
+#
+# Some architectures require the use of special tools and special handling
+# BEFORE building NuttX. The `Make.defs` files for those architectures
+# should override the following define with the correct operations for
+# that platform.
+
+prebuild:
+	$(call PREBUILD, $(TOPDIR))
+
 # pass1 and pass2
 #
 # If the 2 pass build option is selected, then this pass1 target is
@@ -624,10 +649,17 @@ define kconfig_tweak_disable
 	kconfig-tweak --file $1 -u $2
 endef
 else
-  PURGE_MODULE_WARNING  = 2> >(grep -v "warning: the 'modules' option is not supported")
+  KCONFIG_WARNING       = if [ -s kwarning ]; \
+                            then rm kwarning; \
+                              exit 1; \
+                            else \
+                              rm kwarning; \
+                          fi
+  MODULE_WARNING        = "warning: the 'modules' option is not supported"
+  PURGE_MODULE_WARNING  = 2> >(grep -v ${MODULE_WARNING} | tee kwarning) | cat && ${KCONFIG_WARNING}
   KCONFIG_OLDCONFIG     = oldconfig ${PURGE_MODULE_WARNING}
   KCONFIG_OLDDEFCONFIG  = olddefconfig ${PURGE_MODULE_WARNING}
-  KCONFIG_MENUCONFIG    = menuconfig ${PURGE_MODULE_WARNING}
+  KCONFIG_MENUCONFIG    = menuconfig $(subst | cat,,${PURGE_MODULE_WARNING})
   KCONFIG_NCONFIG       = guiconfig ${PURGE_MODULE_WARNING}
   KCONFIG_QCONFIG       = ${KCONFIG_NCONFIG}
   KCONFIG_GCONFIG       = ${KCONFIG_NCONFIG}
@@ -678,6 +710,7 @@ gconfig: apps_preconfig
 savedefconfig: apps_preconfig
 	$(Q) ${KCONFIG_ENV} ${KCONFIG_SAVEDEFCONFIG}
 	$(Q) $(call kconfig_tweak_disable,defconfig.tmp,CONFIG_APPS_DIR)
+	$(Q) $(call kconfig_tweak_disable,defconfig.tmp,CONFIG_BASE_DEFCONFIG)
 	$(Q) grep "CONFIG_ARCH=" .config >> defconfig.tmp
 	$(Q) grep "^CONFIG_ARCH_CHIP_" .config >> defconfig.tmp; true
 	$(Q) grep "CONFIG_ARCH_CHIP=" .config >> defconfig.tmp; true
@@ -756,6 +789,7 @@ endif
 	$(call DELFILE, defconfig)
 	$(call DELFILE, .config)
 	$(call DELFILE, .config.old)
+	$(call DELFILE, .config.orig)
 	$(call DELFILE, .gdbinit)
 
 # Application housekeeping targets.  The APPDIR variable refers to the user

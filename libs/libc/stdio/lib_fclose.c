@@ -30,6 +30,10 @@
 #include <string.h>
 #include <errno.h>
 
+#ifdef CONFIG_FDSAN
+#  include <android/fdsan.h>
+#endif
+
 #include "libc.h"
 
 /****************************************************************************
@@ -71,7 +75,7 @@ int fclose(FAR FILE *stream)
 
       if ((stream->fs_oflags & O_WROK) != 0)
         {
-          ret = lib_fflush(stream, true);
+          ret = lib_fflush(stream);
           errcode = get_errno();
         }
 
@@ -111,25 +115,33 @@ int fclose(FAR FILE *stream)
 
       nxmutex_unlock(&slist->sl_lock);
 
-      /* Check that the underlying file descriptor corresponds to an an open
-       * file.
+      /* Call user custom callback if it is not NULL. */
+
+      if (stream->fs_iofunc.close != NULL)
+        {
+          status = stream->fs_iofunc.close(stream->fs_cookie);
+        }
+      else
+        {
+          int fd = (int)(intptr_t)stream->fs_cookie;
+#ifdef CONFIG_FDSAN
+          uint64_t tag;
+          tag = android_fdsan_create_owner_tag(ANDROID_FDSAN_OWNER_TYPE_FILE,
+                                               (uintptr_t)stream);
+          status = android_fdsan_close_with_tag(fd, tag);
+#else
+          status = close(fd);
+#endif
+        }
+
+      /* If close() returns an error but flush() did not then make sure
+       * that we return the close() error condition.
        */
 
-      if (stream->fs_fd >= 0)
+      if (ret == OK)
         {
-          /* Close the file descriptor and save the return status */
-
-          status = close(stream->fs_fd);
-
-          /* If close() returns an error but flush() did not then make sure
-           * that we return the close() error condition.
-           */
-
-          if (ret == OK)
-            {
-              ret = status;
-              errcode = get_errno();
-            }
+          ret = status;
+          errcode = get_errno();
         }
 
 #ifndef CONFIG_STDIO_DISABLE_BUFFERING

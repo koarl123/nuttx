@@ -110,7 +110,7 @@ static int     nunchuck_sample(FAR struct nunchuck_dev_s *priv,
  * Private Data
  ****************************************************************************/
 
-static const struct file_operations nunchuck_fops =
+static const struct file_operations g_nunchuck_fops =
 {
   nunchuck_open,  /* open */
   nunchuck_close, /* close */
@@ -275,10 +275,9 @@ static int nunchuck_open(FAR struct file *filep)
   FAR struct nunchuck_open_s *opriv;
   int ret;
 
-  DEBUGASSERT(filep && filep->f_inode);
   inode = filep->f_inode;
   DEBUGASSERT(inode->i_private);
-  priv = (FAR struct nunchuck_dev_s *)inode->i_private;
+  priv = inode->i_private;
 
   /* Get exclusive access to the driver structure */
 
@@ -330,11 +329,11 @@ static int nunchuck_close(FAR struct file *filep)
   bool closing;
   int ret;
 
-  DEBUGASSERT(filep && filep->f_priv && filep->f_inode);
+  DEBUGASSERT(filep->f_priv);
   opriv = filep->f_priv;
   inode = filep->f_inode;
   DEBUGASSERT(inode->i_private);
-  priv  = (FAR struct nunchuck_dev_s *)inode->i_private;
+  priv  = inode->i_private;
 
   /* Handle an improbable race conditions with the following atomic test
    * and set.
@@ -414,10 +413,9 @@ static ssize_t nunchuck_read(FAR struct file *filep, FAR char *buffer,
   FAR struct nunchuck_dev_s *priv;
   int ret;
 
-  DEBUGASSERT(filep && filep->f_inode);
   inode = filep->f_inode;
   DEBUGASSERT(inode->i_private);
-  priv  = (FAR struct nunchuck_dev_s *)inode->i_private;
+  priv  = inode->i_private;
 
   /* Make sure that the buffer is sufficiently large to hold at least one
    * complete sample.
@@ -462,10 +460,10 @@ static int nunchuck_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
   FAR struct nunchuck_dev_s *priv;
   int ret;
 
-  DEBUGASSERT(filep && filep->f_priv && filep->f_inode);
+  DEBUGASSERT(filep->f_priv);
   inode = filep->f_inode;
   DEBUGASSERT(inode->i_private);
-  priv  = (FAR struct nunchuck_dev_s *)inode->i_private;
+  priv  = inode->i_private;
 
   /* Get exclusive access to the driver structure */
 
@@ -564,7 +562,7 @@ int nunchuck_register(FAR const char *devname, FAR struct i2c_master_s *i2c)
 
   /* And register the nunchuck driver */
 
-  ret = register_driver(devname, &nunchuck_fops, 0666, priv);
+  ret = register_driver(devname, &g_nunchuck_fops, 0666, priv);
   if (ret < 0)
     {
       ierr("ERROR: register_driver failed: %d\n", ret);

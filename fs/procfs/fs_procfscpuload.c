@@ -45,7 +45,8 @@
 #include <nuttx/fs/procfs.h>
 
 #if !defined(CONFIG_DISABLE_MOUNTPOINT) && defined(CONFIG_FS_PROCFS)
-#if defined(CONFIG_SCHED_CPULOAD) && !defined(CONFIG_FS_PROCFS_EXCLUDE_CPULOAD)
+#if !defined(CONFIG_SCHED_CPULOAD_NONE) && \
+    !defined(CONFIG_FS_PROCFS_EXCLUDE_CPULOAD)
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -94,7 +95,7 @@ static int     cpuload_stat(FAR const char *relpath, FAR struct stat *buf);
  * with any compiler.
  */
 
-const struct procfs_operations cpuload_operations =
+const struct procfs_operations g_cpuload_operations =
 {
   cpuload_open,       /* open */
   cpuload_close,      /* close */

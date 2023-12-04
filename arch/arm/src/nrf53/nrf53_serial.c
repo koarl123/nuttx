@@ -86,7 +86,7 @@
 #ifdef CONFIG_UART0_SERIAL_CONSOLE
 #  define CONSOLE_DEV         g_uart0port /* UART0 is console */
 #  define TTYS0_DEV           g_uart0port /* UART0 is ttyS0 */
-#elif CONFIG_UART1_SERIAL_CONSOLE
+#elif defined(CONFIG_UART1_SERIAL_CONSOLE)
 #  define CONSOLE_DEV         g_uart1port /* UART1 is console */
 #  define TTYS0_DEV           g_uart1port /* UART1 is ttyS0 */
 #endif
@@ -166,7 +166,7 @@ static char g_uart1txbuffer[CONFIG_UART1_TXBUFSIZE];
 static struct nrf53_dev_s g_uart0priv =
 {
   .uartbase       = NRF53_UART0_BASE,
-  .irq            = NRF53_IRQ_UART0,
+  .irq            = NRF53_IRQ_SERIAL0,
   .rx_available   = false,
   .config         =
   {
@@ -208,7 +208,7 @@ static uart_dev_t g_uart0port =
 static struct nrf53_dev_s g_uart1priv =
 {
   .uartbase       = NRF53_UART1_BASE,
-  .irq            = NRF53_IRQ_UART1,
+  .irq            = NRF53_IRQ_SERIAL1,
   .rx_available   = false,
   .config         =
   {
@@ -773,10 +773,9 @@ void arm_serialinit(void)
   /* Register the serial console */
 
   uart_register("/dev/console", &CONSOLE_DEV);
-#endif
-
   uart_register("/dev/ttyS0", &TTYS0_DEV);
   minor = 1;
+#endif
 
   /* Register all remaining UARTs */
 
@@ -786,7 +785,7 @@ void arm_serialinit(void)
     {
       /* Don't create a device for non-configured ports. */
 
-      if (g_uart_devs[i] == 0)
+      if (g_uart_devs[i] == NULL)
         {
           continue;
         }
@@ -856,8 +855,8 @@ int up_putc(int ch)
     }
 
   arm_lowputc(ch);
-  return ch;
 #endif
+  return ch;
 }
 
 #endif /* HAVE_UART_DEVICE && USE_SERIALDRIVER */

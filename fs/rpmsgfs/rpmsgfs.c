@@ -36,10 +36,11 @@
 #include <debug.h>
 #include <limits.h>
 
-#include <nuttx/kmalloc.h>
+#include <nuttx/lib/lib.h>
 #include <nuttx/mutex.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/fs/ioctl.h>
+#include <nuttx/signal.h>
 
 #include "rpmsgfs.h"
 
@@ -83,7 +84,6 @@ struct rpmsgfs_mountpt_s
   char                       fs_root[PATH_MAX];
   void                       *handle;
   int                        timeout;  /* Connect timeout */
-  struct statfs              statfs;
 };
 
 /****************************************************************************
@@ -153,7 +153,7 @@ static int     rpmsgfs_chstat(FAR struct inode *mountpt,
  * with any compiler.
  */
 
-const struct mountpt_operations rpmsgfs_operations =
+const struct mountpt_operations g_rpmsgfs_operations =
 {
   rpmsgfs_open,          /* open */
   rpmsgfs_close,         /* close */
@@ -247,7 +247,7 @@ static void rpmsgfs_mkpath(FAR struct rpmsgfs_mountpt_s *fs,
 
   if (depth >= 0)
     {
-      strncat(path, &relpath[first], pathlen - strlen(path) - 1);
+      strlcat(path, &relpath[first], pathlen - strlen(path));
     }
 
   while (fs->timeout > 0)
@@ -261,7 +261,7 @@ static void rpmsgfs_mkpath(FAR struct rpmsgfs_mountpt_s *fs,
           break;
         }
 
-      usleep(RPMSGFS_RETRY_DELAY_MS * USEC_PER_MSEC);
+      nxsig_usleep(RPMSGFS_RETRY_DELAY_MS * USEC_PER_MSEC);
       fs->timeout -= RPMSGFS_RETRY_DELAY_MS;
     }
 }
@@ -302,7 +302,7 @@ static int rpmsgfs_open(FAR struct file *filep, FAR const char *relpath,
 
   /* Allocate memory for the open file */
 
-  hf = (struct rpmsgfs_ofile_s *) kmm_malloc(sizeof *hf);
+  hf = kmm_malloc(sizeof *hf);
   if (hf == NULL)
     {
       ret = -ENOMEM;
@@ -387,7 +387,7 @@ static int rpmsgfs_close(FAR struct file *filep)
 
   /* Sanity checks */
 
-  DEBUGASSERT(filep->f_priv != NULL && filep->f_inode != NULL);
+  DEBUGASSERT(filep->f_priv != NULL);
 
   /* Recover our private data from the struct file instance */
 
@@ -475,7 +475,7 @@ static ssize_t rpmsgfs_read(FAR struct file *filep, FAR char *buffer,
 
   /* Sanity checks */
 
-  DEBUGASSERT(filep->f_priv != NULL && filep->f_inode != NULL);
+  DEBUGASSERT(filep->f_priv != NULL);
 
   /* Recover our private data from the struct file instance */
 
@@ -517,7 +517,7 @@ static ssize_t rpmsgfs_write(FAR struct file *filep, const char *buffer,
   FAR struct rpmsgfs_ofile_s *hf;
   ssize_t ret;
 
-  DEBUGASSERT(filep->f_priv != NULL && filep->f_inode != NULL);
+  DEBUGASSERT(filep->f_priv != NULL);
 
   /* Recover our private data from the struct file instance */
 
@@ -571,7 +571,7 @@ static off_t rpmsgfs_seek(FAR struct file *filep, off_t offset, int whence)
 
   /* Sanity checks */
 
-  DEBUGASSERT(filep->f_priv != NULL && filep->f_inode != NULL);
+  DEBUGASSERT(filep->f_priv != NULL);
 
   /* Recover our private data from the struct file instance */
 
@@ -614,7 +614,7 @@ static int rpmsgfs_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   /* Sanity checks */
 
-  DEBUGASSERT(filep->f_priv != NULL && filep->f_inode != NULL);
+  DEBUGASSERT(filep->f_priv != NULL);
 
   /* Recover our private data from the struct file instance */
 
@@ -661,7 +661,7 @@ static int rpmsgfs_sync(FAR struct file *filep)
 
   /* Sanity checks */
 
-  DEBUGASSERT(filep->f_priv != NULL && filep->f_inode != NULL);
+  DEBUGASSERT(filep->f_priv != NULL);
 
   /* Recover our private data from the struct file instance */
 
@@ -734,11 +734,11 @@ static int rpmsgfs_fstat(FAR const struct file *filep, FAR struct stat *buf)
 
   /* Sanity checks */
 
-  DEBUGASSERT(filep != NULL && buf != NULL);
+  DEBUGASSERT(buf != NULL);
 
   /* Recover our private data from the struct file instance */
 
-  DEBUGASSERT(filep->f_priv != NULL && filep->f_inode != NULL);
+  DEBUGASSERT(filep->f_priv != NULL);
   hf    = filep->f_priv;
   inode = filep->f_inode;
 
@@ -780,11 +780,11 @@ static int rpmsgfs_fchstat(FAR const struct file *filep,
 
   /* Sanity checks */
 
-  DEBUGASSERT(filep != NULL && buf != NULL);
+  DEBUGASSERT(buf != NULL);
 
   /* Recover our private data from the struct file instance */
 
-  DEBUGASSERT(filep->f_priv != NULL && filep->f_inode != NULL);
+  DEBUGASSERT(filep->f_priv != NULL);
   hf    = filep->f_priv;
   inode = filep->f_inode;
 
@@ -823,13 +823,9 @@ static int rpmsgfs_truncate(FAR struct file *filep, off_t length)
   FAR struct rpmsgfs_ofile_s *hf;
   int ret = OK;
 
-  /* Sanity checks */
-
-  DEBUGASSERT(filep != NULL);
-
   /* Recover our private data from the struct file instance */
 
-  DEBUGASSERT(filep->f_priv != NULL && filep->f_inode != NULL);
+  DEBUGASSERT(filep->f_priv != NULL);
   hf    = filep->f_priv;
   inode = filep->f_inode;
 
@@ -1108,7 +1104,7 @@ static int rpmsgfs_bind(FAR struct inode *blkdriver, FAR const void *data,
     }
 
   ret = rpmsgfs_client_bind(&fs->handle, cpuname);
-  kmm_free(options);
+  lib_free(options);
   if (ret < 0)
     {
       kmm_free(fs);
@@ -1140,7 +1136,7 @@ static int rpmsgfs_bind(FAR struct inode *blkdriver, FAR const void *data,
 
   if (fs->fs_root[len - 1] != '/')
     {
-      strcat(fs->fs_root, "/");
+      strlcat(fs->fs_root, "/", sizeof(fs->fs_root));
     }
 
   *handle = (FAR void *)fs;
@@ -1225,20 +1221,7 @@ static int rpmsgfs_statfs(FAR struct inode *mountpt, FAR struct statfs *buf)
       return ret;
     }
 
-  if (fs->statfs.f_type == RPMSGFS_MAGIC)
-    {
-      memcpy(buf, &fs->statfs, sizeof(struct statfs));
-      nxmutex_unlock(&fs->fs_lock);
-      return 0;
-    }
-
-  /* Call the host fs to perform the statfs */
-
-  memset(buf, 0, sizeof(struct statfs));
   ret = rpmsgfs_client_statfs(fs->handle, fs->fs_root, buf);
-  buf->f_type = RPMSGFS_MAGIC;
-
-  memcpy(&fs->statfs, buf, sizeof(struct statfs));
 
   nxmutex_unlock(&fs->fs_lock);
   return ret;

@@ -33,6 +33,7 @@
 #include <sys/param.h>
 #include <nuttx/config.h>
 #include <nuttx/spinlock.h>
+#include <assert.h>
 
 #include "xtensa.h"
 #include "xtensa_attr.h"
@@ -51,6 +52,18 @@
 #  define PSRAM_SPEED PSRAM_CACHE_S40M
 #else  /* #if CONFIG_ESP32S3_SPIRAM_SPEED_80M */
 #  define PSRAM_SPEED PSRAM_CACHE_S80M
+#endif
+
+#if CONFIG_ESP32S3_SPIRAM_VADDR_OFFSET
+#define SPIRAM_VADDR_OFFSET   CONFIG_ESP32S3_SPIRAM_VADDR_OFFSET
+#else
+#define SPIRAM_VADDR_OFFSET   0
+#endif
+
+#if CONFIG_ESP32S3_SPIRAM_VADDR_MAP_SIZE
+#define SPIRAM_VADDR_MAP_SIZE CONFIG_ESP32S3_SPIRAM_VADDR_MAP_SIZE
+#else
+#define SPIRAM_VADDR_MAP_SIZE 0
 #endif
 
 static bool g_spiram_inited;
@@ -98,6 +111,38 @@ extern int cache_dbus_mmu_set(uint32_t ext_ram, uint32_t vaddr,
                               uint32_t num, uint32_t fixed);
 
 /****************************************************************************
+ * Private Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: mmu_valid_space
+ *
+ * Description:
+ *   Calculate MMU valid space.
+ *
+ * Input Parameters:
+ *   start_address - Pointer to store MMU mapped start address
+ *
+ * Returned Value:
+ *   MMU valid space size by bytes.
+ *
+ ****************************************************************************/
+
+static inline uint32_t mmu_valid_space(uint32_t *start_address)
+{
+  for (int i = 0; i < FLASH_MMU_TABLE_SIZE; i++)
+    {
+      if (FLASH_MMU_TABLE[i] & MMU_INVALID)
+        {
+          *start_address = DRAM0_CACHE_ADDRESS_LOW + i * MMU_PAGE_SIZE;
+          return (FLASH_MMU_TABLE_SIZE - i) * MMU_PAGE_SIZE;
+        }
+    }
+
+  return 0;
+}
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -109,24 +154,67 @@ extern int cache_dbus_mmu_set(uint32_t ext_ram, uint32_t vaddr,
 void IRAM_ATTR esp_spiram_init_cache(void)
 {
   uint32_t regval;
-  int ret = psram_get_available_size(&g_mapped_size);
+  uint32_t psram_size;
+  uint32_t mapped_vaddr_size;
+  uint32_t target_mapped_vaddr_start;
+  uint32_t target_mapped_vaddr_end;
 
+  int ret = psram_get_available_size(&psram_size);
   if (ret != OK)
     {
       abort();
     }
 
-  merr("Mapped size = %d\n", g_mapped_size);
+  minfo("PSRAM available size = %d\n", psram_size);
+  mapped_vaddr_size = mmu_valid_space(&g_mapped_vaddr_start);
 
-  if ((SOC_EXTRAM_DATA_HIGH - SOC_EXTRAM_DATA_LOW) < g_mapped_size)
+  if ((SPIRAM_VADDR_OFFSET + SPIRAM_VADDR_MAP_SIZE) > 0)
+    {
+      ASSERT(SPIRAM_VADDR_OFFSET % MMU_PAGE_SIZE == 0);
+      ASSERT(SPIRAM_VADDR_MAP_SIZE % MMU_PAGE_SIZE == 0);
+      target_mapped_vaddr_start = DRAM0_CACHE_ADDRESS_LOW +
+                                  SPIRAM_VADDR_OFFSET;
+      target_mapped_vaddr_end = target_mapped_vaddr_start +
+                                SPIRAM_VADDR_MAP_SIZE;
+      if (target_mapped_vaddr_start < g_mapped_vaddr_start)
+        {
+          mwarn("Invalid target vaddr = 0x%x, change vaddr to: 0x%x\n",
+                target_mapped_vaddr_start, g_mapped_vaddr_start);
+          target_mapped_vaddr_start = g_mapped_vaddr_start;
+        }
+
+      if (target_mapped_vaddr_end >
+         (g_mapped_vaddr_start + mapped_vaddr_size))
+        {
+          mwarn("Invalid vaddr map size: 0x%x, change vaddr end: 0x%x\n",
+                SPIRAM_VADDR_MAP_SIZE,
+                g_mapped_vaddr_start + mapped_vaddr_size);
+          target_mapped_vaddr_end = g_mapped_vaddr_start + mapped_vaddr_size;
+        }
+
+      ASSERT(target_mapped_vaddr_end > target_mapped_vaddr_start);
+      ASSERT(target_mapped_vaddr_end <= DRAM0_CACHE_ADDRESS_HIGH);
+      mapped_vaddr_size = target_mapped_vaddr_end -
+                          target_mapped_vaddr_start;
+      g_mapped_vaddr_start = target_mapped_vaddr_start;
+    }
+
+  if (mapped_vaddr_size < psram_size)
     {
       /* Decide these logics when there's a real PSRAM with larger size */
 
-      merr("Virtual address not enough for PSRAM!");
-      abort();
+      g_mapped_size = mapped_vaddr_size;
+      mwarn("Virtual address not enough for PSRAM, only %d size is mapped!",
+            g_mapped_size);
+    }
+  else
+    {
+      g_mapped_size = psram_size;
     }
 
-  g_mapped_vaddr_start = SOC_EXTRAM_DATA_HIGH - g_mapped_size;
+  minfo("Virtual address size = 0x%x, start: 0x%x, end: 0x%x\n",
+         mapped_vaddr_size, g_mapped_vaddr_start,
+         g_mapped_vaddr_start + g_mapped_size);
 
   /* Suspend DRAM Case during configuration */
 
@@ -150,7 +238,7 @@ void IRAM_ATTR esp_spiram_init_cache(void)
   /* Currently no non-heap stuff on ESP32S3 */
 
   g_allocable_vaddr_start = g_mapped_vaddr_start;
-  g_allocable_vaddr_end = SOC_EXTRAM_DATA_HIGH;
+  g_allocable_vaddr_end = g_mapped_vaddr_start + g_mapped_size;
 }
 
 /* Simple RAM test. Writes a word every 32 bytes. Takes about a second
@@ -186,7 +274,7 @@ bool esp_spiram_test(void)
 
           if (errct < 4)
             {
-              merr("SPI SRAM error@%08x:%08x/%08x \n", &spiram[p], spiram[p],
+              merr("SPI SRAM error@%p:%08x/%08x \n", &spiram[p], spiram[p],
                    p ^ 0xaaaaaaaa);
             }
         }
@@ -296,7 +384,7 @@ int IRAM_ATTR g_rodata_flash2spiram_offset(void)
 }
 #endif
 
-int esp_spiram_init(void)
+int IRAM_ATTR esp_spiram_init(void)
 {
   int r;
   uint32_t psram_physical_size = 0;
@@ -378,6 +466,28 @@ bool esp_spiram_is_initialized(void)
 uint8_t esp_spiram_get_cs_io(void)
 {
   return psram_get_cs_io();
+}
+
+/**
+ * @brief Get allocable virtual start address
+ *
+ * @return Allocable virtual start address
+ */
+
+uint32_t esp_spiram_allocable_vaddr_start(void)
+{
+  return g_allocable_vaddr_start;
+}
+
+/**
+ * @brief Get allocable virtual end address
+ *
+ * @return Allocable virtual end address
+ */
+
+uint32_t esp_spiram_allocable_vaddr_end(void)
+{
+  return g_allocable_vaddr_end;
 }
 
 #endif

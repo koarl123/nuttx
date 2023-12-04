@@ -123,7 +123,8 @@ static int keyboard_open(FAR struct file *filep)
 
   /* Initializes the buffer for each open file */
 
-  ret = circbuf_init(&opriv->circ, NULL, upper->nums);
+  ret = circbuf_init(&opriv->circ, NULL,
+                     upper->nums * sizeof(struct keyboard_event_s));
   if (ret < 0)
     {
       kmm_free(opriv);
@@ -138,6 +139,7 @@ static int keyboard_open(FAR struct file *filep)
       ret = upper->lower->open(upper->lower);
       if (ret < 0)
         {
+          circbuf_uninit(&opriv->circ);
           kmm_free(opriv);
           nxmutex_unlock(&upper->lock);
           return ret;
@@ -274,7 +276,7 @@ static int keyboard_poll(FAR struct file *filep,
 
       if (!circbuf_is_empty(&opriv->circ))
         {
-          poll_notify(&opriv->fds, 1, POLLIN);
+          poll_notify(&fds, 1, POLLIN);
         }
     }
   else

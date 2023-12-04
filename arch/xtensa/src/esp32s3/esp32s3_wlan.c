@@ -40,7 +40,9 @@
 #include <nuttx/kmalloc.h>
 #include <nuttx/wdog.h>
 #include <nuttx/wqueue.h>
+#include <nuttx/net/ip.h>
 #include <nuttx/net/netdev.h>
+
 #if defined(CONFIG_NET_PKT)
 #  include <nuttx/net/pkt.h>
 #endif
@@ -269,7 +271,11 @@ static void wlan_ipv6multicast(struct wlan_priv_s *priv);
 
 static inline void wlan_cache_txpkt_tail(struct wlan_priv_s *priv)
 {
-    iob_tryadd_queue(priv->dev.d_iob, &priv->txb);
+  if (priv->dev.d_iob)
+    {
+      iob_tryadd_queue(priv->dev.d_iob, &priv->txb);
+    }
+
   netdev_iob_clear(&priv->dev);
 }
 
@@ -290,13 +296,8 @@ static inline void wlan_cache_txpkt_tail(struct wlan_priv_s *priv)
 static struct iob_s *wlan_recvframe(struct wlan_priv_s *priv)
 {
   struct iob_s *iob;
-  irqstate_t flags;
-
-  flags = spin_lock_irqsave(&priv->lock);
 
   iob = iob_remove_queue(&priv->rxb);
-
-  spin_unlock_irqrestore(&priv->lock, flags);
 
   return iob;
 }
@@ -444,27 +445,21 @@ static int wlan_rx_done(struct wlan_priv_s *priv, void *buffer,
       goto out;
     }
 
+out:
+
   if (eb != NULL)
     {
       esp_wifi_free_eb(eb);
+    }
+
+  if (ret != OK && iob != NULL)
+    {
+      iob_free_chain(iob);
     }
 
   if (work_available(&priv->rxwork))
     {
       work_queue(WLAN_WORK, &priv->rxwork, wlan_rxpoll, priv, 0);
-    }
-
-  return 0;
-
-out:
-  if (iob != NULL)
-    {
-      iob_free_chain(iob);
-    }
-
-  if (eb != NULL)
-    {
-      esp_wifi_free_eb(eb);
     }
 
   wlan_txavail(&priv->dev);
@@ -634,11 +629,7 @@ static int wlan_txpoll(struct net_driver_s *dev)
   wlan_cache_txpkt_tail(priv);
   wlan_transmit(priv);
 
-  /* If zero is returned, the polling will continue until
-   * all connections have been examined.
-   */
-
-  return 1;
+  return OK;
 }
 
 /****************************************************************************
@@ -801,9 +792,9 @@ static int wlan_ifup(struct net_driver_s *dev)
   struct wlan_priv_s *priv = (struct wlan_priv_s *)dev->d_private;
 
 #ifdef CONFIG_NET_IPv4
-  ninfo("Bringing up: %d.%d.%d.%d\n",
-        (uint8_t)(dev->d_ipaddr), (uint8_t)(dev->d_ipaddr >> 8),
-        (uint8_t)(dev->d_ipaddr >> 16), (uint8_t)(dev->d_ipaddr >> 24));
+  ninfo("Bringing up: %u.%u.%u.%u\n",
+        ip4_addr1(dev->d_ipaddr), ip4_addr2(dev->d_ipaddr),
+        ip4_addr3(dev->d_ipaddr), ip4_addr4(dev->d_ipaddr));
 #endif
 #ifdef CONFIG_NET_IPv6
   ninfo("Bringing up: %04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x\n",
@@ -1462,7 +1453,7 @@ static void wlan_softap_tx_done(uint8_t *data, uint16_t *len, bool status)
 int esp32s3_wlan_sta_set_linkstatus(bool linkstatus)
 {
   int ret = -EINVAL;
-  FAR struct wlan_priv_s *priv = &g_wlan_priv[ESP32S3_WLAN_STA_DEVNO];
+  struct wlan_priv_s *priv = &g_wlan_priv[ESP32S3_WLAN_STA_DEVNO];
 
   if (priv != NULL)
     {

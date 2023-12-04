@@ -97,10 +97,11 @@ static int nxsig_queue_action(FAR struct tcb_s *stcb, siginfo_t *info)
           sigq->mask = sigact->act.sa_mask;
           if ((sigact->act.sa_flags & SA_NODEFER) == 0)
             {
-              sigq->mask |= SIGNO2SET(info->si_signo);
+              sigaddset(&sigq->mask, info->si_signo);
             }
 
           memcpy(&sigq->info, info, sizeof(siginfo_t));
+          sigq->info.si_user = sigact->act.sa_user;
 
           /* Put it at the end of the pending signals list */
 
@@ -170,7 +171,7 @@ static FAR sigpendq_t *nxsig_alloc_pendingsignal(void)
         {
           /* No... Allocate the pending signal */
 
-          sigpend = (FAR sigpendq_t *)kmm_malloc((sizeof (sigpendq_t)));
+          sigpend = kmm_malloc(sizeof(sigpendq_t));
 
           /* Check if we got an allocated message */
 
@@ -193,12 +194,19 @@ static FAR sigpendq_t *nxsig_alloc_pendingsignal(void)
  ****************************************************************************/
 
 static FAR sigpendq_t *
-  nxsig_find_pendingsignal(FAR struct task_group_s *group, int signo)
+nxsig_find_pendingsignal(FAR struct task_group_s *group, int signo)
 {
   FAR sigpendq_t *sigpend = NULL;
   irqstate_t flags;
 
   DEBUGASSERT(group != NULL);
+
+  /* Determining whether a signal is reliable or unreliable */
+
+  if (SIGRTMIN <= signo && signo <= SIGRTMAX)
+    {
+      return sigpend;
+    }
 
   /* Pending signals can be added from interrupt level. */
 
@@ -321,11 +329,19 @@ int nxsig_tcbdispatch(FAR struct tcb_s *stcb, siginfo_t *info)
   int masked;
   int ret = OK;
 
-  sinfo("TCB=%p pid=%d signo=%d code=%d value=%d mask=%08" PRIx32 "\n",
+  sinfo("TCB=%p pid=%d signo=%d code=%d value=%d masked=%s\n",
         stcb, stcb->pid, info->si_signo, info->si_code,
-        info->si_value.sival_int, stcb->sigprocmask);
+        info->si_value.sival_int,
+        sigismember(&stcb->sigprocmask, info->si_signo) == 1 ? "YES" : "NO");
 
   DEBUGASSERT(stcb != NULL && info != NULL);
+
+  /* Return ESRCH when thread was in exit processing */
+
+  if ((stcb->flags & TCB_FLAG_EXIT_PROCESSING) != 0)
+    {
+      return -ESRCH;
+    }
 
   /* Don't actually send a signal for signo 0. */
 
@@ -383,7 +399,7 @@ int nxsig_tcbdispatch(FAR struct tcb_s *stcb, siginfo_t *info)
            nxsig_ismember(&stcb->sigwaitmask, info->si_signo)))
         {
           memcpy(&stcb->sigunbinfo, info, sizeof(siginfo_t));
-          stcb->sigwaitmask = NULL_SIGNAL_SET;
+          sigemptyset(&stcb->sigwaitmask);
 
           if (WDOG_ISACTIVE(&stcb->waitdog))
             {
@@ -446,7 +462,7 @@ int nxsig_tcbdispatch(FAR struct tcb_s *stcb, siginfo_t *info)
       if (stcb->task_state == TSTATE_WAIT_SIG)
         {
           memcpy(&stcb->sigunbinfo, info, sizeof(siginfo_t));
-          stcb->sigwaitmask = NULL_SIGNAL_SET;
+          sigemptyset(&stcb->sigwaitmask);
 
           if (WDOG_ISACTIVE(&stcb->waitdog))
             {

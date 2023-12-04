@@ -33,7 +33,7 @@
 #include <nuttx/sched_note.h>
 #include <sched/sched.h>
 #include <nuttx/cache.h>
-#include <arch/spinlock.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/init.h>
 
 #include "init/init.h"
@@ -58,7 +58,7 @@ typedef void (*arm64_cpustart_t)(void *data);
 
 struct arm64_boot_params
 {
-  uint64_t mpid;
+  uint64_t cpuid;
   char *boot_sp;
   arm64_cpustart_t func;
   void *arg;
@@ -69,7 +69,7 @@ struct arm64_boot_params
 volatile struct arm64_boot_params aligned_data(L1_CACHE_BYTES)
 cpu_boot_params =
 {
-  .mpid    = -1,
+  .cpuid   = -1,
   .boot_sp = (char *)g_cpu_idlestackalloc[0],
 };
 
@@ -77,6 +77,13 @@ volatile uint64_t *g_cpu_int_stacktop[CONFIG_SMP_NCPUS] =
 {
   (uint64_t *)(g_interrupt_stacks[0] + INTSTACK_SIZE),
 };
+
+#ifdef CONFIG_ARM64_DECODEFIQ
+volatile uint64_t *g_cpu_int_fiq_stacktop[CONFIG_SMP_NCPUS] =
+{
+  (uint64_t *)(g_interrupt_fiq_stacks[0] + INTSTACK_SIZE),
+};
+#endif
 
 /****************************************************************************
  * Private data
@@ -93,7 +100,7 @@ static inline void local_delay(void)
     }
 }
 
-#ifdef CONFIG_ARCH_HAVE_MMU
+#if defined (CONFIG_ARCH_HAVE_MMU) || defined (CONFIG_ARCH_HAVE_MPU)
 static void flush_boot_params(void)
 {
   uintptr_t flush_start;
@@ -103,11 +110,6 @@ static void flush_boot_params(void)
   flush_end     = flush_start + sizeof(cpu_boot_params);
 
   up_flush_dcache(flush_start, flush_end);
-}
-#else
-static void flush_boot_params(void)
-{
-  /* TODO: Flush at MPU platform */
 }
 #endif
 
@@ -147,15 +149,13 @@ static void arm64_smp_init_top(void *arg)
 static void arm64_start_cpu(int cpu_num, char *stack, int stack_sz,
                             arm64_cpustart_t fn)
 {
-  uint64_t cpu_mpid;
-
-  cpu_mpid = arm64_get_mpid(cpu_num);
+  uint64_t cpu_mpid = arm64_get_mpid(cpu_num);
 
 #ifdef CONFIG_SCHED_INSTRUMENTATION
 
   /* Notify of the start event */
 
-  sched_note_cpu_start(this_task(), cpu);
+  sched_note_cpu_start(this_task(), cpu_num);
 #endif
 
   cpu_boot_params.boot_sp   = stack;
@@ -165,11 +165,16 @@ static void arm64_start_cpu(int cpu_num, char *stack, int stack_sz,
   g_cpu_int_stacktop[cpu_num] =
             (uint64_t *)(g_interrupt_stacks[cpu_num] + INTSTACK_SIZE);
 
+#ifdef CONFIG_ARM64_DECODEFIQ
+  g_cpu_int_fiq_stacktop[cpu_num] =
+            (uint64_t *)(g_interrupt_fiq_stacks[cpu_num] + INTSTACK_SIZE);
+#endif
+
   ARM64_DSB();
 
   /* store mpid last as this is our synchronization point */
 
-  cpu_boot_params.mpid = cpu_mpid;
+  cpu_boot_params.cpuid = arm64_get_cpuid(cpu_mpid);
 
   flush_boot_params();
 
@@ -227,15 +232,6 @@ int up_cpu_start(int cpu)
   sched_note_cpu_start(this_task(), cpu);
 #endif
 
-#ifdef CONFIG_STACK_COLORATION
-  /* If stack debug is enabled, then fill the stack with a
-   * recognizable value that we can use later to test for high
-   * water marks.
-   */
-
-  arm64_stack_color(g_cpu_idlestackalloc[cpu], SMP_STACK_SIZE);
-#endif
-
   cpu_boot_params.cpu_ready_flag = 0;
   arm64_start_cpu(cpu, (char *)g_cpu_idlestackalloc[cpu], SMP_STACK_SIZE,
                   arm64_smp_init_top);
@@ -268,7 +264,9 @@ void arm64_boot_secondary_c_routine(void)
 
   arm64_gic_secondary_init();
 
-  up_enable_irq(SGI_CPU_PAUSE);
+  arm64_arch_timer_secondary_init();
+
+  up_perf_init(NULL);
 
   func  = cpu_boot_params.func;
   arg   = cpu_boot_params.arg;
@@ -287,10 +285,3 @@ void arm64_boot_secondary_c_routine(void)
   func(arg);
 }
 
-int arm64_smp_sgi_init(void)
-{
-  irq_attach(SGI_CPU_PAUSE, arm64_pause_handler, 0);
-  up_enable_irq(SGI_CPU_PAUSE);
-
-  return 0;
-}

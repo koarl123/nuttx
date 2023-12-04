@@ -35,6 +35,7 @@
 
 #include <nuttx/kmalloc.h>
 #include <nuttx/fs/fs.h>
+#include <nuttx/lib/lib.h>
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -58,7 +59,7 @@
     { \
       if ((d)->buffer != NULL) \
         { \
-          kmm_free((d)->buffer); \
+          lib_free((d)->buffer); \
           (d)->buffer  = NULL; \
         } \
     } \
@@ -167,16 +168,6 @@ int inode_lock(void);
 void inode_unlock(void);
 
 /****************************************************************************
- * Name: inode_checkflags
- *
- * Description:
- *   Check if the access described by 'oflags' is supported on 'inode'
- *
- ****************************************************************************/
-
-int inode_checkflags(FAR struct inode *inode, int oflags);
-
-/****************************************************************************
  * Name: inode_search
  *
  * Description:
@@ -278,7 +269,7 @@ int inode_chstat(FAR struct inode *inode,
  *
  ****************************************************************************/
 
-int inode_getpath(FAR struct inode *node, FAR char *path);
+int inode_getpath(FAR struct inode *node, FAR char *path, size_t len);
 
 /****************************************************************************
  * Name: inode_free
@@ -336,21 +327,6 @@ void inode_root_reserve(void);
 
 int inode_reserve(FAR const char *path,
                   mode_t mode, FAR struct inode **inode);
-
-/****************************************************************************
- * Name: inode_unlink
- *
- * Description:
- *   Given a path, remove a the node from the in-memory, inode tree that the
- *   path refers to.  This is normally done in preparation to removing or
- *   moving an inode.
- *
- * Assumptions/Limitations:
- *   The caller must hold the inode semaphore
- *
- ****************************************************************************/
-
-FAR struct inode *inode_unlink(FAR const char *path);
 
 /****************************************************************************
  * Name: inode_remove
@@ -416,6 +392,32 @@ int foreach_inode(foreach_inode_t handler, FAR void *arg);
  ****************************************************************************/
 
 int dir_allocate(FAR struct file *filep, FAR const char *relpath);
+
+/****************************************************************************
+ * Name: pseudofile_create
+ *
+ * Description:
+ *   Create the pseudo-file with specified path and mode, and alloc inode
+ *   of this pseudo-file.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_PSEUDOFS_FILE
+int pseudofile_create(FAR struct inode **node, FAR const char *path,
+                      mode_t mode);
+#endif
+
+/****************************************************************************
+ * Name: inode_is_pseudofile
+ *
+ * Description:
+ *    Check inode whether is a pseudo file.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_PSEUDOFS_FILE
+bool inode_is_pseudofile(FAR struct inode *inode);
+#endif
 
 #undef EXTERN
 #if defined(__cplusplus)

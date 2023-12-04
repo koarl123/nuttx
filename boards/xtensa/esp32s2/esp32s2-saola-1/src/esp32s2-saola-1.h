@@ -82,6 +82,18 @@
 int esp32s2_bringup(void);
 
 /****************************************************************************
+ * Name: board_spiflash_init
+ *
+ * Description:
+ *   Initialize the SPIFLASH and register the MTD device.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_ESP32S2_SPIFLASH
+int board_spiflash_init(void);
+#endif
+
+/****************************************************************************
  * Name: esp32s2_gpio_init
  *
  * Description:
@@ -206,6 +218,17 @@ int esp32s2_cs4344_initialize(void);
 
 #ifdef CONFIG_ESP32S2_LEDC
 int esp32s2_pwm_setup(void);
+#endif
+
+/****************************************************************************
+ * Name: board_twai_setup
+ *
+ * Description:
+ *  Initialize TWAI and register the TWAI device
+ *
+ ****************************************************************************/
+#ifdef CONFIG_ESP32S2_TWAI
+int board_twai_setup(void);
 #endif
 
 #endif /* __ASSEMBLY__ */

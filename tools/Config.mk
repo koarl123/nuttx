@@ -395,8 +395,8 @@ define INSTALL_LIB
 	$(ECHO_END)
 endef
 
-# ARCHIVE_ADD - Add a list of files to an archive
-# Example: $(call ARCHIVE_ADD, archive-file, "file1 file2 file3 ...")
+# ARCHIVE - Add a list of files to an archive
+# Example: $(call ARCHIVE, archive-file, "file1 file2 file3 ...")
 #
 # Note: The fileN strings may not contain spaces or  characters that may be
 # interpreted strangely by the shell
@@ -411,18 +411,8 @@ endef
 #
 #   CONFIG_WINDOWS_NATIVE - Defined for a Windows native build
 
-define ARCHIVE_ADD
-	$(ECHO_BEGIN)"AR (add): ${shell basename $(1)} "
-	$(Q) $(AR) $1 $2
-	$(ECHO_END)
-endef
-
-# ARCHIVE - Same as above, but ensure the archive is
-# created from scratch
-
 define ARCHIVE
-	$(Q) $(RM) $1
-	$(Q) $(AR) $1  $2
+	$(AR) $1  $2
 endef
 
 # PRELINK - Prelink a list of files
@@ -457,6 +447,15 @@ define PRELINK
 	$(Q) $(LD) -Ur -o $1 $2 && $(OBJCOPY) --localize-hidden $1
 endef
 endif
+
+# PREBUILD -- Perform pre build operations
+# Some architectures require the use of special tools and special handling
+# BEFORE building NuttX. The `Make.defs` files for those architectures
+# should override the following define with the correct operations for
+# that platform.
+
+define PREBUILD
+endef
 
 # POSTBUILD -- Perform post build operations
 # Some architectures require the use of special tools and special handling
@@ -585,11 +584,12 @@ define CLEAN
 	$(Q) if exist (del /f /q  .*.swp)
 	$(call DELFILE,$(subst /,\,$(OBJS)))
 	$(Q) if exist $(BIN) (del /f /q  $(subst /,\,$(BIN)))
+	$(Q) if exist $(BIN).lock (del /f /q  $(subst /,\,$(BIN).lock))
 	$(Q) if exist $(EXTRA) (del /f /q  $(subst /,\,$(EXTRA)))
 endef
 else
 define CLEAN
-	$(Q) rm -f *$(OBJEXT) *$(LIBEXT) *~ .*.swp $(OBJS) $(BIN) $(EXTRA)
+	$(Q) rm -f *$(OBJEXT) *$(LIBEXT) *~ .*.swp $(OBJS) $(BIN) $(BIN).lock $(EXTRA)
 endef
 endif
 
@@ -656,6 +656,24 @@ else
     ARCHXXINCLUDES += ${INCSYSDIR_PREFIX}$(TOPDIR)$(DELIM)include$(DELIM)etl
   endif
 endif
+
+ifeq ($(CONFIG_LIBM_NEWLIB),y)
+  ARCHINCLUDES += ${INCSYSDIR_PREFIX}$(TOPDIR)$(DELIM)include$(DELIM)newlib
+  ARCHXXINCLUDES += ${INCSYSDIR_PREFIX}$(TOPDIR)$(DELIM)include$(DELIM)newlib
+endif
+
+#libmcs`s math.h should include after libcxx, or it will override libcxx/include/math.h and build error
+ifeq ($(CONFIG_LIBM_LIBMCS),y)
+  ARCHDEFINES += ${DEFINE_PREFIX}LIBMCS_LONG_DOUBLE_IS_64BITS
+  ARCHINCLUDES += ${INCSYSDIR_PREFIX}$(TOPDIR)$(DELIM)include$(DELIM)libmcs
+  ARCHXXINCLUDES += ${INCSYSDIR_PREFIX}$(TOPDIR)$(DELIM)include$(DELIM)libmcs
+endif
+
+ifeq ($(CONFIG_LIBM_OPENLIBM),y)
+  ARCHINCLUDES += ${INCSYSDIR_PREFIX}$(TOPDIR)$(DELIM)include$(DELIM)openlibm
+  ARCHXXINCLUDES += ${INCSYSDIR_PREFIX}$(TOPDIR)$(DELIM)include$(DELIM)openlibm
+endif
+
 ARCHXXINCLUDES += ${INCSYSDIR_PREFIX}$(TOPDIR)$(DELIM)include
 
 # Convert filepaths to their proper system format (i.e. Windows/Unix)
@@ -665,3 +683,14 @@ ifeq ($(CONFIG_CYGWIN_WINTOOL),y)
 else
   CONVERT_PATH = $1
 endif
+
+# Upper/Lower case string, add the `UL` prefix to private function 
+
+ULPOP = $(wordlist 3,$(words $(1)),$(1))
+ULSUB = $(subst $(word 1,$(1)),$(word 2,$(1)),$(2))
+ULMAP = $(if $(1),$(call ULSUB,$(1),$(call ULMAP,$(call ULPOP,$(1)),$(2))),$(2))
+UPPERMAP = a A b B c C d D e E f F g G h H i I j J k K l L m M n N o O p P q Q r R s S t T u U v V w W x X y Y z Z
+LOWERMAP = A a B b C c D d E e F f G g H h I i J j K k L l M m N n O o P p Q q R r S s T t U u V v W w X x Y y Z z
+
+UPPER_CASE = $(call ULMAP,$(UPPERMAP),$(1))
+LOWER_CASE = $(call ULMAP,$(LOWERMAP),$(1))

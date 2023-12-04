@@ -80,7 +80,7 @@
 #    define CONSOLE_DEV     g_uart0_dev     /* UART0 is console */
 #    define TTYS0_DEV       g_uart0_dev     /* UART0 is ttyS0 */
 #    define UART0_ASSIGNED      1
-# elif defined(CONFIG_UART1_SERIAL_CONSOLE)
+#  elif defined(CONFIG_UART1_SERIAL_CONSOLE)
 #    define CONSOLE_DEV         g_uart1_dev  /* UART1 is console */
 #    define TTYS0_DEV           g_uart1_dev  /* UART1 is ttyS0 */
 #    define UART1_ASSIGNED      1
@@ -663,9 +663,9 @@ static bool esp32c3_txempty(struct uart_dev_s *dev)
   struct esp32c3_uart_s *priv = dev->priv;
 
   reg = getreg32(UART_INT_RAW_REG(priv->id));
-  reg = reg & UART_TXFIFO_EMPTY_INT_RAW_M;
+  reg = REG_MASK(reg, UART_TX_DONE_INT_RAW);
 
-  return (reg > 0) ? true : false;
+  return reg > 0;
 }
 
 /****************************************************************************
