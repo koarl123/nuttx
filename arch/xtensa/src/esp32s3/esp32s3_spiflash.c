@@ -41,6 +41,7 @@
 
 #include "xtensa.h"
 #include "xtensa_attr.h"
+#include "hardware/esp32s3_efuse.h"
 #include "hardware/esp32s3_extmem.h"
 #include "hardware/esp32s3_spi_mem_reg.h"
 #include "hardware/esp32s3_cache_memory.h"
@@ -118,7 +119,7 @@
 
 /* SPI flash operation */
 
-#  ifdef CONFIG_ESP32S3S_SPI_FLASH_USE_32BIT_ADDRESS
+#  ifdef CONFIG_ESP32S3_SPI_FLASH_USE_32BIT_ADDRESS
 #    define ADDR_BITS(addr)         (((addr) & 0xff000000) ? 32 : 24)
 #    define READ_CMD(addr)          (ADDR_BITS(addr) == 32 ? FLASH_CMD_FSTRD4B : \
                                                              FLASH_CMD_FSTRD)
@@ -1305,4 +1306,41 @@ int esp32s3_spiflash_init(void)
   spi_flash_guard_set(&g_spi_flash_guard_funcs);
 
   return ret;
+}
+
+/****************************************************************************
+ * Name: esp32s3_flash_encryption_enabled
+ *
+ * Description:
+ *   Check if ESP32-S3 enables SPI Flash encryption.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   True: SPI Flash encryption is enable, False if not.
+ *
+ ****************************************************************************/
+
+bool esp32s3_flash_encryption_enabled(void)
+{
+  bool enabled = false;
+  uint32_t regval;
+  uint32_t flash_crypt_cnt;
+
+  regval = getreg32(EFUSE_RD_REPEAT_DATA1_REG);
+  flash_crypt_cnt = (regval >> EFUSE_SPI_BOOT_CRYPT_CNT_S) &
+                    EFUSE_SPI_BOOT_CRYPT_CNT_V;
+
+  while (flash_crypt_cnt)
+    {
+      if (flash_crypt_cnt & 1)
+        {
+          enabled = !enabled;
+        }
+
+      flash_crypt_cnt >>= 1;
+    }
+
+  return enabled;
 }

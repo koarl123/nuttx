@@ -21,6 +21,10 @@ config ARCH_CHIP_ESP32S2WROVER
 
 endchoice # ESP32-S2 Chip Selection
 
+config ESPRESSIF_CHIP_SERIES
+	string
+	default "esp32s2"
+
 choice ESP32S2_DEFAULT_CPU_FREQ
 	prompt "CPU Frequency"
 	default ESP32S2_DEFAULT_CPU_FREQ_240
@@ -190,6 +194,8 @@ config ESP32S2_RUN_IRAM
 		images that can fit entirely in IRAM.
 
 menu "ESP32-S2 Peripheral Selection"
+
+source "arch/xtensa/src/common/espressif/Kconfig"
 
 config ESP32S2_UART
 	bool
@@ -419,6 +425,28 @@ config ESP32S2_RWDT
 		it will reset Main System and the RTC module. If you don't want
 		to have the RTC module reset, please, use the Timers' Module WDTs.
 		They will only reset Main System.
+
+config ESP32S2_XTWDT
+	bool "XTAL32K Watchdog Timer"
+	depends on ESP32S2_RTC_CLK_EXT_OSC || ESP32S2_RTC_CLK_EXT_XTAL
+	default n
+	select ESP32S2_WDT
+	select ESP32S2_RTCIO_IRQ
+	---help---
+		Includes XTWDT. This watchdog timer monitors the status of the
+		external 32 kHz crystal oscillator (XTAL32K). When XTAL32K_CLK works
+		as the clock source of RTC_SLOW_CLK and it stops oscillating, the
+		XTAL32K watchdog timer first switches to BACKUP32K_CLK derived from
+		RC_SLOW_CLK (if ESP32S2_XTWDT_BACKUP_CLK_ENABLE) and, then, generates
+		an interrupt that could be captured by WDIOC_CAPTURE.
+
+config ESP32S2_XTWDT_BACKUP_CLK_ENABLE
+	bool "Automatically switch to BACKUP32K_CLK when timer expires"
+	depends on ESP32S2_XTWDT
+	default y
+	---help---
+		Enable this to automatically switch to BACKUP32K_CLK as the source of
+		RTC_SLOW_CLK when the watchdog timer expires.
 
 config ESP32S2_RTC
 	bool "Real Time Clock (RTC)"
@@ -1211,6 +1239,7 @@ config ESP32S2_APP_FORMAT_LEGACY
 
 config ESP32S2_APP_FORMAT_MCUBOOT
 	bool "MCUboot-bootable format"
+	depends on !MCUBOOT_BOOTLOADER
 	select ESP32S2_HAVE_OTA_PARTITION
 	---help---
 		The Espressif port of MCUboot supports the loading of unsegmented firmware
