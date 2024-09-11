@@ -158,7 +158,7 @@ static void pty_destroy(FAR struct pty_devpair_s *devpair)
 
       /* Un-register the slave device */
 
-      snprintf(devname, 16, "/dev/pts/%d", devpair->pp_minor);
+      snprintf(devname, sizeof(devname), "/dev/pts/%u", devpair->pp_minor);
     }
   else
     {
@@ -166,12 +166,12 @@ static void pty_destroy(FAR struct pty_devpair_s *devpair)
        * unlinked).
        */
 
-      snprintf(devname, 16, "/dev/pty%d", (int)devpair->pp_minor);
+      snprintf(devname, sizeof(devname), "/dev/pty%u", devpair->pp_minor);
       unregister_driver(devname);
 
       /* Un-register the slave device */
 
-      snprintf(devname, 16, "/dev/ttyp%d", devpair->pp_minor);
+      snprintf(devname, sizeof(devname), "/dev/ttyp%u", devpair->pp_minor);
     }
 
   unregister_driver(devname);
@@ -285,32 +285,21 @@ static int pty_open(FAR struct file *filep)
         }
     }
 
-  /* If one side of the driver has been unlinked, then refuse further
-   * opens.
-   */
+  /* First open? */
 
-  if (devpair->pp_unlinked)
+  if (devpair->pp_nopen == 0)
     {
-      ret = -EIDRM;
+      /* Yes, create the internal pipe */
+
+      ret = pty_pipe(devpair);
     }
-  else
+
+  /* Increment the count of open references on the driver */
+
+  if (ret >= 0)
     {
-      /* First open? */
-
-      if (devpair->pp_nopen == 0)
-        {
-          /* Yes, create the internal pipe */
-
-          ret = pty_pipe(devpair);
-        }
-
-      /* Increment the count of open references on the driver */
-
-      if (ret >= 0)
-        {
-          devpair->pp_nopen++;
-          DEBUGASSERT(devpair->pp_nopen > 0);
-        }
+      devpair->pp_nopen++;
+      DEBUGASSERT(devpair->pp_nopen > 0);
     }
 
   nxmutex_unlock(&devpair->pp_lock);
@@ -318,7 +307,7 @@ static int pty_open(FAR struct file *filep)
 }
 
 /****************************************************************************
- * Name: pty_open
+ * Name: pty_close
  ****************************************************************************/
 
 static int pty_close(FAR struct file *filep)
@@ -372,6 +361,7 @@ static int pty_close(FAR struct file *filep)
     {
       /* Yes.. Free the device pair now (without freeing the semaphore) */
 
+      nxmutex_unlock(&devpair->pp_lock);
       pty_destroy(devpair);
       return OK;
     }
@@ -961,6 +951,7 @@ static int pty_unlink(FAR struct inode *inode)
 
   if (devpair->pp_nopen == 0)
     {
+      nxmutex_unlock(&devpair->pp_lock);
       pty_destroy(devpair);
       return OK;
     }
@@ -1035,7 +1026,7 @@ int pty_register2(int minor, bool susv1)
    * Where N is the minor number
    */
 
-  snprintf(devname, 16, "/dev/pty%d", minor);
+  snprintf(devname, sizeof(devname), "/dev/pty%d", minor);
 
   ret = register_driver(devname, &g_pty_fops, 0666, &devpair->pp_master);
   if (ret < 0)
@@ -1053,11 +1044,11 @@ int pty_register2(int minor, bool susv1)
 
   if (susv1)
     {
-      snprintf(devname, 16, "/dev/pts/%d", minor);
+      snprintf(devname, sizeof(devname), "/dev/pts/%d", minor);
     }
   else
     {
-      snprintf(devname, 16, "/dev/ttyp%d", minor);
+      snprintf(devname, sizeof(devname), "/dev/ttyp%d", minor);
     }
 
   ret = register_driver(devname, &g_pty_fops, 0666, &devpair->pp_slave);
@@ -1069,7 +1060,7 @@ int pty_register2(int minor, bool susv1)
   return OK;
 
 errout_with_master:
-  snprintf(devname, 16, "/dev/pty%d", minor);
+  snprintf(devname, sizeof(devname), "/dev/pty%d", minor);
   unregister_driver(devname);
 
 errout_with_devpair:

@@ -1,6 +1,8 @@
 /****************************************************************************
  * binfmt/libelf/libelf_coredump.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -91,7 +93,7 @@ static int elf_emit(FAR struct elf_dumpinfo_s *cinfo,
 {
   FAR const uint8_t *ptr = buf;
   size_t total = len;
-  int ret;
+  int ret = 0;
 
   while (total > 0)
     {
@@ -122,7 +124,7 @@ static int elf_emit_align(FAR struct elf_dumpinfo_s *cinfo)
                         ELF_PAGESIZE) - cinfo->stream->nput;
   unsigned char null[256];
   off_t total = align;
-  off_t ret;
+  off_t ret = 0;
 
   memset(null, 0, sizeof(null));
 
@@ -277,7 +279,7 @@ static void elf_emit_tcb_note(FAR struct elf_dumpinfo_s *cinfo,
     }
   else
     {
-      regs = (uintptr_t *)tcb->xcp.regs;
+      regs = (FAR uintptr_t *)tcb->xcp.regs;
     }
 
   if (regs != NULL)
@@ -290,8 +292,8 @@ static void elf_emit_tcb_note(FAR struct elf_dumpinfo_s *cinfo,
             }
           else
             {
-              status.pr_regs[i] =
-                *(uintptr_t *)((uint8_t *)regs + g_tcbinfo.reg_off.p[i]);
+              status.pr_regs[i] = *(FAR uintptr_t *)
+                  ((FAR uint8_t *)regs + g_tcbinfo.reg_off.p[i]);
             }
         }
     }
@@ -423,9 +425,34 @@ static void elf_emit_memory(FAR struct elf_dumpinfo_s *cinfo, int memsegs)
 
   for (i = 0; i < memsegs; i++)
     {
-      elf_emit(cinfo, (FAR void *)cinfo->regions[i].start,
-               cinfo->regions[i].end -
-               cinfo->regions[i].start);
+      if (cinfo->regions[i].flags & PF_REGISTER)
+        {
+          FAR uintptr_t *start = (FAR uintptr_t *)cinfo->regions[i].start;
+          FAR uintptr_t *end = (FAR uintptr_t *)cinfo->regions[i].end;
+          uintptr_t buf[64];
+          size_t offset = 0;
+
+          while (start < end)
+            {
+              buf[offset++] = *start++;
+
+              if (offset % (sizeof(buf) / sizeof(uintptr_t)) == 0)
+                {
+                  elf_emit(cinfo, buf, sizeof(buf));
+                  offset = 0;
+                }
+            }
+
+          if (offset != 0)
+            {
+              elf_emit(cinfo, buf, offset * sizeof(uintptr_t));
+            }
+        }
+      else
+        {
+          elf_emit(cinfo, (FAR void *)cinfo->regions[i].start,
+                   cinfo->regions[i].end - cinfo->regions[i].start);
+        }
 
       /* Align to page */
 
@@ -443,7 +470,7 @@ static void elf_emit_memory(FAR struct elf_dumpinfo_s *cinfo, int memsegs)
 
 static void elf_emit_tcb_phdr(FAR struct elf_dumpinfo_s *cinfo,
                               FAR struct tcb_s *tcb,
-                              FAR Elf_Phdr *phdr, off_t *offset)
+                              FAR Elf_Phdr *phdr, FAR off_t *offset)
 {
   uintptr_t sp;
 

@@ -53,9 +53,19 @@ endif()
 
 add_link_options(--entry=__start)
 # override the ARCHIVE command
-set(CMAKE_C_ARCHIVE_CREATE "<CMAKE_AR> rcs <TARGET> <LINK_FLAGS> <OBJECTS>")
-set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> rcs <TARGET> <LINK_FLAGS> <OBJECTS>")
-set(CMAKE_ASM_ARCHIVE_CREATE "<CMAKE_AR> rcs <TARGET> <LINK_FLAGS> <OBJECTS>")
+set(CMAKE_ARCHIVE_COMMAND "<CMAKE_AR> rcs <TARGET> <LINK_FLAGS> <OBJECTS>")
+set(CMAKE_RANLIB_COMMAND "<CMAKE_RANLIB> <TARGET>")
+set(CMAKE_C_ARCHIVE_CREATE ${CMAKE_ARCHIVE_COMMAND})
+set(CMAKE_CXX_ARCHIVE_CREATE ${CMAKE_ARCHIVE_COMMAND})
+set(CMAKE_ASM_ARCHIVE_CREATE ${CMAKE_ARCHIVE_COMMAND})
+
+set(CMAKE_C_ARCHIVE_APPEND ${CMAKE_ARCHIVE_COMMAND})
+set(CMAKE_CXX_ARCHIVE_APPEND ${CMAKE_ARCHIVE_COMMAND})
+set(CMAKE_ASM_ARCHIVE_APPEND ${CMAKE_ARCHIVE_COMMAND})
+
+set(CMAKE_C_ARCHIVE_FINISH ${CMAKE_RANLIB_COMMAND})
+set(CMAKE_CXX_ARCHIVE_FINISH ${CMAKE_RANLIB_COMMAND})
+set(CMAKE_ASM_ARCHIVE_FINISH ${CMAKE_RANLIB_COMMAND})
 
 if(CONFIG_ARCH_ARMV8A)
   add_compile_options(-march=armv8-a)
@@ -119,27 +129,35 @@ if(CONFIG_ARCH_FPU)
   add_compile_options(-D_LDBL_EQ_DBL)
 endif()
 
-set(ARCHCFLAGS
-    "-Wstrict-prototypes -fno-common -Wall -Wshadow -Werror -Wundef -Wno-attributes -Wno-unknown-pragmas"
-)
-set(ARCHCXXFLAGS
-    "-nostdinc++ -fno-common -Wall -Wshadow -Wundef -Wno-attributes -Wno-unknown-pragmas"
-)
-if(NOT ${CONFIG_ARCH_TOOLCHAIN_CLANG})
-  string(APPEND ARCHCFLAGS " -Wno-psabi")
-  string(APPEND ARCHCXXFLAGS " -Wno-psabi")
+add_compile_options(
+  -fno-common
+  -Wall
+  -Wshadow
+  -Wundef
+  -Wno-attributes
+  -Wno-unknown-pragmas
+  $<$<COMPILE_LANGUAGE:C>:-Werror>
+  $<$<COMPILE_LANGUAGE:C>:-Wstrict-prototypes>)
+
+if(NOT CONFIG_LIBCXXTOOLCHAIN)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-nostdinc++>)
 endif()
 
-if(${CONFIG_CXX_STANDARD})
-  string(APPEND ARCHCXXFLAGS " -std=${CONFIG_CXX_STANDARD}")
+if(NOT CONFIG_ARCH_TOOLCHAIN_CLANG)
+  add_compile_options(-Wno-psabi)
 endif()
 
-if(NOT ${CONFIG_CXX_EXCEPTION})
-  string(APPEND ARCHCXXFLAGS " -fno-exceptions -fcheck-new")
+if(CONFIG_CXX_STANDARD)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-std=${CONFIG_CXX_STANDARD}>)
 endif()
 
-if(NOT ${CONFIG_CXX_RTTI})
-  string(APPEND ARCHCXXFLAGS " -fno-rtti")
+if(NOT CONFIG_CXX_EXCEPTION)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
+                      $<$<COMPILE_LANGUAGE:CXX>:-fcheck-new>)
+endif()
+
+if(NOT CONFIG_CXX_RTTI)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>)
 endif()
 
 add_link_options(-nostdlib)
@@ -171,19 +189,4 @@ if(CONFIG_ARCH_TOOLCHAIN_GNU)
   if(GCCVER EQUAL 12)
     add_link_options(-Wl,--no-warn-rwx-segments)
   endif()
-endif()
-
-if(NOT "${CMAKE_C_FLAGS}" STREQUAL "")
-  string(REGEX MATCH "${ARCHCFLAGS}" EXISTS_FLAGS "${CMAKE_C_FLAGS}")
-endif()
-if(NOT EXISTS_FLAGS)
-  set(CMAKE_ASM_FLAGS
-      "${CMAKE_ASM_FLAGS} ${ARCHCFLAGS}"
-      CACHE STRING "" FORCE)
-  set(CMAKE_C_FLAGS
-      "${CMAKE_C_FLAGS} ${ARCHCFLAGS}"
-      CACHE STRING "" FORCE)
-  set(CMAKE_CXX_FLAGS
-      "${CMAKE_CXX_FLAGS} ${ARCHCXXFLAGS}"
-      CACHE STRING "" FORCE)
 endif()

@@ -41,7 +41,7 @@
  * Public Functions
  ****************************************************************************/
 
-#ifdef CONFIG_ARCH_HAVE_TRUSTZONE
+#if defined(CONFIG_ARCH_TRUSTZONE_SECURE) || defined(CONFIG_ARCH_HIPRI_INTERRUPT)
 /****************************************************************************
  * Name: up_set_secure_irq
  *
@@ -159,8 +159,10 @@ void arm_gic0_initialize(void)
 #ifdef CONFIG_SMP
   /* Attach SGI interrupt handlers. This attaches the handler to all CPUs. */
 
-  DEBUGVERIFY(irq_attach(GIC_IRQ_SGI1, arm_start_handler, NULL));
-  DEBUGVERIFY(irq_attach(GIC_IRQ_SGI2, arm_pause_handler, NULL));
+  DEBUGVERIFY(irq_attach(GIC_SMP_CPUSTART, arm_start_handler, NULL));
+  DEBUGVERIFY(irq_attach(GIC_SMP_CPUPAUSE, arm_pause_handler, NULL));
+  DEBUGVERIFY(irq_attach(GIC_SMP_CPUCALL,
+                         nxsched_smp_call_handler, NULL));
 #endif
 
   arm_gic_dump("Exit arm_gic0_initialize", true, 0);
@@ -657,4 +659,24 @@ int arm_gic_irq_trigger(int irq, bool edge)
   return -EINVAL;
 }
 
+#  ifdef CONFIG_SMP
+/****************************************************************************
+ * Name: up_send_smp_call
+ *
+ * Description:
+ *   Send smp call to target cpu.
+ *
+ * Input Parameters:
+ *   cpuset - The set of CPUs to receive the SGI.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+void up_send_smp_call(cpu_set_t cpuset)
+{
+  up_trigger_irq(GIC_SMP_CPUCALL, cpuset);
+}
+#  endif
 #endif /* CONFIG_ARMV7R_HAVE_GICv2 */

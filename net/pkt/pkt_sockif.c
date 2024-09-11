@@ -1,6 +1,8 @@
 /****************************************************************************
  * net/pkt/pkt_sockif.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -168,7 +170,7 @@ static int pkt_setup(FAR struct socket *psock)
 
 static sockcaps_t pkt_sockcaps(FAR struct socket *psock)
 {
-  return 0;
+  return SOCKCAP_NONBLOCKING;
 }
 
 /****************************************************************************
@@ -242,7 +244,7 @@ static int pkt_bind(FAR struct socket *psock,
 
       ifindex = ((FAR struct sockaddr_ll *)addr)->sll_ifindex;
 
-      /* Get the MAC address of that interface */
+      /* Check if we have that interface */
 
       dev = netdev_findbyindex(ifindex);
       if (dev == NULL)
@@ -250,18 +252,9 @@ static int pkt_bind(FAR struct socket *psock,
           return -EADDRNOTAVAIL;
         }
 
-      /* Only Ethernet is supported */
-
-      if (dev->d_lltype != NET_LL_ETHERNET &&
-          dev->d_lltype != NET_LL_IEEE80211)
-        {
-          return -EAFNOSUPPORT;
-        }
-
-      /* Put ifindex and mac address into connection */
+      /* Put ifindex into connection */
 
       conn->ifindex = ifindex;
-      memcpy(conn->lmac, dev->d_mac.ether.ether_addr_octet, 6);
 
       return OK;
     }

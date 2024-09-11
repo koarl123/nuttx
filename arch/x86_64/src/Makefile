@@ -18,7 +18,7 @@
 #
 ############################################################################
 
-include $(TOPDIR)/Make.defs
+include $(TOPDIR)/tools/apps-or-nuttx-Make.defs
 include chip/Make.defs
 
 ifeq ($(CONFIG_ARCH_INTEL64),y)
@@ -52,6 +52,20 @@ KBIN = libkarch$(LIBEXT)
 BIN  = libarch$(LIBEXT)
 
 # Override in Make.defs if linker is not 'ld'
+
+$(foreach lib,$(notdir $(wildcard $(APPDIR)$(DELIM)staging$(DELIM)*$(LIBEXT))), \
+  $(foreach elib,$(EXTRA_LIBS), \
+    $(if $(filter $(notdir $(elib)),$(lib)), \
+      $(eval NAMEFULL_LIBS+=$(elib)), \
+      $(if $(filter $(notdir $(elib)),$(patsubst lib%$(LIBEXT),-l%,$(lib))), \
+        $(eval NAMESPEC_LIBS+=$(elib)) \
+       ) \
+     ) \
+   ) \
+ )
+
+EXTRA_LIBS := $(filter-out $(NAMEFULL_LIBS) $(NAMESPEC_LIBS),$(EXTRA_LIBS))
+EXTRA_LIBS += $(wildcard $(APPDIR)$(DELIM)staging$(DELIM)*$(LIBEXT))
 
 LDSTARTGROUP ?= --start-group
 LDENDGROUP ?= --end-group
@@ -113,7 +127,7 @@ nuttx$(EXEEXT): board/libboard$(LIBEXT) $(ARCHSCRIPT)
 	@echo "LD: nuttx$(EXEEXT)"
 	$(Q) $(LD) $(LDFLAGS) $(LIBPATHS) $(EXTRA_LIBPATHS) \
 		-o $(NUTTX) $(EXTRA_OBJS) \
-		$(LDSTARTGROUP) $(EXTRA_LIBS) --whole-archive --no-relax $(LDLIBS) $(LDENDGROUP)
+		$(LDSTARTGROUP) $(EXTRA_LIBS) --no-relax $(LDLIBS) $(LDENDGROUP)
 ifneq ($(CONFIG_WINDOWS_NATIVE),y)
 	$(Q) $(NM) $(NUTTX) | \
 	grep -v '\(compiled\)\|\(\$(OBJEXT)$$\)\|\( [aUw] \)\|\(\.\.ng$$\)\|\(LASH[RL]DI\)' | \

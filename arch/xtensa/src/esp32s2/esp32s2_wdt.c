@@ -38,6 +38,9 @@
 #include "hardware/esp32s2_rtccntl.h"
 #include "hardware/esp32s2_tim.h"
 
+#include "soc/periph_defs.h"
+#include "esp_private/periph_ctrl.h"
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -852,6 +855,10 @@ static void wdt_enableint(struct esp32s2_wdt_dev_s *dev)
     }
   else if (IS_MWDT(dev))
     {
+      /* Level Interrupt */
+
+      wdt_modifyreg32(dev, MWDT_CONFIG0_OFFSET, 0, TIMG_WDT_LEVEL_INT_EN);
+
       wdt_modifyreg32(dev, MWDT_INT_ENA_REG_OFFSET, 0, TIMG_WDT_INT_ENA);
     }
   else
@@ -882,6 +889,10 @@ static void wdt_disableint(struct esp32s2_wdt_dev_s *dev)
     }
   else if (IS_MWDT(dev))
     {
+      /* Level Interrupt */
+
+      wdt_modifyreg32(dev, MWDT_CONFIG0_OFFSET, TIMG_WDT_LEVEL_INT_EN, 0);
+
       wdt_modifyreg32(dev, MWDT_INT_ENA_REG_OFFSET, TIMG_WDT_INT_ENA, 0);
     }
   else
@@ -1034,6 +1045,7 @@ struct esp32s2_wdt_dev_s *esp32s2_wdt_init(enum esp32s2_wdt_inst_e wdt_id)
     }
   else
     {
+      periph_module_enable(PERIPH_TIMG1_MODULE);
       wdt->inuse = true;
     }
 

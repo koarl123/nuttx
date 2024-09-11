@@ -1,6 +1,8 @@
 /****************************************************************************
  * net/procfs/netdev_statistics.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -293,6 +295,13 @@ static int netprocfs_inet4addresses(FAR struct netprocfs_file_s *netfile)
   len += snprintf(&netfile->line[len], NET_LINELEN - len,
                   "\tinet addr:%s ", inet_ntoa_r(addr, inetaddr,
                                                  sizeof(inetaddr)));
+#ifdef CONFIG_NET_ARP_ACD
+  if (dev->d_acd.conflict_flag == ARP_ACD_ADDRESS_CONFLICT)
+    {
+      len += snprintf(&netfile->line[len], NET_LINELEN - len,
+                      "(conflict!) ");
+    }
+#endif
 
   /* Show the IPv4 default router address */
 
@@ -403,8 +412,8 @@ static int netprocfs_rxstatistics_header(
     FAR struct netprocfs_file_s *netfile)
 {
   DEBUGASSERT(netfile != NULL);
-  return snprintf(netfile->line, NET_LINELEN , "\tRX: %-8s %-8s %-8s\n",
-                  "Received", "Fragment", "Errors");
+  return snprintf(netfile->line, NET_LINELEN , "\tRX: %-8s %-8s %-8s %-8s\n",
+                  "Received", "Fragment", "Errors", "Bytes");
 }
 #endif /* CONFIG_NETDEV_STATISTICS */
 
@@ -422,10 +431,12 @@ static int netprocfs_rxstatistics(FAR struct netprocfs_file_s *netfile)
   dev = netfile->dev;
   stats = &dev->d_statistics;
 
-  return snprintf(netfile->line, NET_LINELEN, "\t    %08lx %08lx %08lx\n",
+  return snprintf(netfile->line, NET_LINELEN, \
+                  "\t    %08lx %08lx %08lx %-16llx\n",
                   (unsigned long)stats->rx_packets,
                   (unsigned long)stats->rx_fragments,
-                  (unsigned long)stats->rx_errors);
+                  (unsigned long)stats->rx_errors,
+                  (unsigned long long)stats->rx_bytes);
 }
 #endif /* CONFIG_NETDEV_STATISTICS */
 
@@ -517,8 +528,9 @@ static int netprocfs_txstatistics_header(
 {
   DEBUGASSERT(netfile != NULL);
 
-  return snprintf(netfile->line, NET_LINELEN, "\tTX: %-8s %-8s %-8s %-8s\n",
-                 "Queued", "Sent", "Errors", "Timeouts");
+  return snprintf(netfile->line, NET_LINELEN,
+                 "\tTX: %-8s %-8s %-8s %-8s %-8s\n",
+                 "Queued", "Sent", "Errors", "Timeouts", "Bytes");
 }
 #endif /* CONFIG_NETDEV_STATISTICS */
 
@@ -537,11 +549,12 @@ static int netprocfs_txstatistics(FAR struct netprocfs_file_s *netfile)
   stats = &dev->d_statistics;
 
   return snprintf(netfile->line, NET_LINELEN,
-                  "\t    %08lx %08lx %08lx %08lx\n",
+                  "\t    %08lx %08lx %08lx %08lx %-16llx \n",
                   (unsigned long)stats->tx_packets,
                   (unsigned long)stats->tx_done,
                   (unsigned long)stats->tx_errors,
-                  (unsigned long)stats->tx_timeouts);
+                  (unsigned long)stats->tx_timeouts,
+                  (unsigned long long)stats->tx_bytes);
 }
 #endif /* CONFIG_NETDEV_STATISTICS */
 

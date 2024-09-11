@@ -389,6 +389,7 @@ int stm32_adc_setup(void);
 #endif
 
 /****************************************************************************
+
  * Name: stm32_gpio_initialize
  *
  * Description:
@@ -404,5 +405,17 @@ int stm32_adc_setup(void);
 int stm32_gpio_initialize(void);
 #endif
 
+/****************************************************************************
+ * Name: stm32_can_setup
+ *
+ * Description:
+ *  Initialize CAN and register the CAN device
+ *
+ ****************************************************************************/
+#ifdef CONFIG_STM32_CAN_CHARDRIVER
+int stm32_can_setup(void);
+#endif
+
 #endif /* __ASSEMBLY__ */
+
 #endif /* __BOARDS_ARM_STM32_STM32F429I_DISCO_SRC_STM32F429I_DISCO_H */

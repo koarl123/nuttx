@@ -676,10 +676,10 @@ void arm_ack_irq(int irq)
   lc823450_dvfs_exit_idle(irq);
 #endif
 
-  board_autoled_on(LED_CPU0 + up_cpu_index());
+  board_autoled_on(LED_CPU0 + this_cpu());
 
 #ifdef CONFIG_SMP
-  if (irq > LC823450_IRQ_LPDSP0 && 1 == up_cpu_index())
+  if (irq > LC823450_IRQ_LPDSP0 && 1 == this_cpu())
     {
       /* IRQ should be handled on CPU0 */
 
@@ -820,23 +820,7 @@ int lc823450_irq_register(int irq, struct lc823450_irq_ops *ops)
 #endif /* CONFIG_LC823450_VIRQ */
 
 /****************************************************************************
- * Name: arm_intstack_top
- *
- * Description:
- *   Return a pointer to the top the correct interrupt stack allocation
- *   for the current CPU.
- *
- ****************************************************************************/
-
-#if defined(CONFIG_SMP) && CONFIG_ARCH_INTERRUPTSTACK > 7
-uintptr_t arm_intstack_top(void)
-{
-  return g_cpu_intstack_top[up_cpu_index()];
-}
-#endif
-
-/****************************************************************************
- * Name: arm_intstack_alloc
+ * Name: up_get_intstackbase
  *
  * Description:
  *   Return a pointer to the "alloc" the correct interrupt stack allocation
@@ -845,8 +829,8 @@ uintptr_t arm_intstack_top(void)
  ****************************************************************************/
 
 #if defined(CONFIG_SMP) && CONFIG_ARCH_INTERRUPTSTACK > 7
-uintptr_t arm_intstack_alloc(void)
+uintptr_t up_get_intstackbase(int cpu)
 {
-  return g_cpu_intstack_top[up_cpu_index()] - INTSTACK_SIZE;
+  return g_cpu_intstack_top[cpu] - INTSTACK_SIZE;
 }
 #endif

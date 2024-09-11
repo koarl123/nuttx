@@ -36,8 +36,10 @@
 #include <nuttx/cancelpt.h>
 #include <nuttx/fs/fs.h>
 
+#include "sched/sched.h"
 #include "inode/inode.h"
 #include "driver/driver.h"
+#include "notify/notify.h"
 
 /****************************************************************************
  * Private Functions
@@ -196,7 +198,15 @@ static int file_vopen(FAR struct file *filep, FAR const char *path,
 
       /* Get the file structure of the opened character driver proxy */
 
-      return block_proxy(filep, path, oflags);
+      ret = block_proxy(filep, path, oflags);
+#ifdef CONFIG_FS_NOTIFY
+      if (ret >= 0)
+        {
+          notify_open(path, filep->f_oflags);
+        }
+#endif
+
+      return ret;
     }
 #endif
 
@@ -255,6 +265,9 @@ static int file_vopen(FAR struct file *filep, FAR const char *path,
     }
 
   RELEASE_SEARCH(&desc);
+#ifdef CONFIG_FS_NOTIFY
+  notify_open(path, filep->f_oflags);
+#endif
   return OK;
 
 errout_with_inode:
@@ -350,6 +363,11 @@ int file_open(FAR struct file *filep, FAR const char *path, int oflags, ...)
   ret = file_vopen(filep, path, oflags, 0, ap);
   va_end(ap);
 
+  if (ret >= OK)
+    {
+      FS_ADD_BACKTRACE(filep);
+    }
+
   return ret;
 }
 
@@ -420,7 +438,7 @@ int nx_open(FAR const char *path, int oflags, ...)
   /* Let nx_vopen() do all of the work */
 
   va_start(ap, oflags);
-  fd = nx_vopen(nxsched_self(), path, oflags, ap);
+  fd = nx_vopen(this_task(), path, oflags, ap);
   va_end(ap);
 
   return fd;
@@ -450,7 +468,7 @@ int open(FAR const char *path, int oflags, ...)
   /* Let nx_vopen() do most of the work */
 
   va_start(ap, oflags);
-  fd = nx_vopen(nxsched_self(), path, oflags, ap);
+  fd = nx_vopen(this_task(), path, oflags, ap);
   va_end(ap);
 
   /* Set the errno value if any errors were reported by nx_open() */

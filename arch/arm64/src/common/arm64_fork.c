@@ -225,7 +225,11 @@ pid_t arm64_fork(const struct fork_s *context)
   pforkctx->regs[REG_X28]  = context->regs[FORK_REG_X28];
   pforkctx->regs[REG_X29]  = newfp;
 
+#if CONFIG_ARCH_ARM64_EXCEPTION_LEVEL == 3
+  pforkctx->spsr = SPSR_MODE_EL3H;
+#else
   pforkctx->spsr = SPSR_MODE_EL1H;
+#endif
 
 #ifdef CONFIG_SUPPRESS_INTERRUPTS
   pforkctx->spsr       |= (DAIF_IRQ_BIT | DAIF_FIQ_BIT);
@@ -234,8 +238,12 @@ pid_t arm64_fork(const struct fork_s *context)
   pforkctx->elr  = (uint64_t)context->lr;
 
   pforkctx->exe_depth       = 0;
-  pforkctx->sp_elx          = (uint64_t)pforkctx;
+  pforkctx->sp_elx          = (uint64_t)stack_ptr;
+#ifdef CONFIG_ARCH_KERNEL_STACK
+  pforkctx->sp_el0          = (uint64_t)child->cmn.xcp.ustkptr;
+#else
   pforkctx->sp_el0          = (uint64_t)pforkctx;
+#endif
   pforkctx->tpidr_el0       = (uint64_t)(&child->cmn);
   pforkctx->tpidr_el1       = (uint64_t)(&child->cmn);
 

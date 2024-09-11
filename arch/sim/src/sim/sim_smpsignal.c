@@ -128,6 +128,48 @@ bool up_cpu_pausereq(int cpu)
 }
 
 /****************************************************************************
+ * Name: up_cpu_paused_save
+ *
+ * Description:
+ *   Handle a pause request from another CPU.  Normally, this logic is
+ *   executed from interrupt handling logic within the architecture-specific
+ *   However, it is sometimes necessary to perform the pending
+ *   pause operation in other contexts where the interrupt cannot be taken
+ *   in order to avoid deadlocks.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   On success, OK is returned.  Otherwise, a negated errno value indicating
+ *   the nature of the failure is returned.
+ *
+ ****************************************************************************/
+
+int up_cpu_paused_save(void)
+{
+  struct tcb_s *tcb = this_task();
+
+  /* Update scheduler parameters */
+
+  nxsched_suspend_scheduler(tcb);
+
+#ifdef CONFIG_SCHED_INSTRUMENTATION
+  /* Notify that we are paused */
+
+  sched_note_cpu_paused(tcb);
+#endif
+
+  /* Save the current context at CURRENT_REGS into the TCB at the head
+   * of the assigned task list for this CPU.
+   */
+
+  sim_savestate(tcb->xcp.regs);
+
+  return OK;
+}
+
+/****************************************************************************
  * Name: up_cpu_paused
  *
  * Description:
@@ -156,24 +198,6 @@ bool up_cpu_pausereq(int cpu)
 
 int up_cpu_paused(int cpu)
 {
-  struct tcb_s *tcb = current_task(cpu);
-
-  /* Update scheduler parameters */
-
-  nxsched_suspend_scheduler(tcb);
-
-#ifdef CONFIG_SCHED_INSTRUMENTATION
-  /* Notify that we are paused */
-
-  sched_note_cpu_paused(tcb);
-#endif
-
-  /* Save the current context at CURRENT_REGS into the TCB at the head
-   * of the assigned task list for this CPU.
-   */
-
-  sim_savestate(tcb->xcp.regs);
-
   /* Wait for the spinlock to be released */
 
   spin_unlock(&g_cpu_paused[cpu]);
@@ -184,16 +208,31 @@ int up_cpu_paused(int cpu)
 
   spin_lock(&g_cpu_wait[cpu]);
 
-  /* Restore the exception context of the tcb at the (new) head of the
-   * assigned task list.
-   */
+  spin_unlock(&g_cpu_wait[cpu]);
+  spin_unlock(&g_cpu_resumed[cpu]);
 
-  tcb = current_task(cpu);
+  return OK;
+}
 
-  /* The way that we handle signals in the simulation is kind of a
-   * kludge.  This would be unsafe in a truly multi-threaded,
-   * interrupt driven environment.
-   */
+/****************************************************************************
+ * Name: up_cpu_paused_restore
+ *
+ * Description:
+ *  Restore the state of the CPU after it was paused via up_cpu_pause(),
+ *  and resume normal tasking.
+ *
+ * Input Parameters:
+ *  None
+ *
+ * Returned Value:
+ *   On success, OK is returned.  Otherwise, a negated errno value indicating
+ *   the nature of the failure is returned.
+ *
+ ****************************************************************************/
+
+int up_cpu_paused_restore(void)
+{
+  struct tcb_s *tcb = this_task();
 
 #ifdef CONFIG_SCHED_INSTRUMENTATION
   /* Notify that we have resumed */
@@ -207,15 +246,13 @@ int up_cpu_paused(int cpu)
 
   /* Restore the cpu lock */
 
-  restore_critical_section();
+  restore_critical_section(tcb, this_cpu());
 
   /* Then switch contexts.  Any necessary address environment changes
    * will be made when the interrupt returns.
    */
 
   sim_restorestate(tcb->xcp.regs);
-  spin_unlock(&g_cpu_wait[cpu]);
-  spin_unlock(&g_cpu_resumed[cpu]);
 
   return OK;
 }
@@ -410,3 +447,44 @@ int up_cpu_resume(int cpu)
 
   return OK;
 }
+
+#ifdef CONFIG_SMP
+
+/****************************************************************************
+ * Name: sim_init_func_call_ipi
+ *
+ * Description:
+ *   Attach the CPU function call request interrupt to the NuttX logic.
+ *
+ * Input Parameters:
+ *   irq - the SIGUSR2 interrupt number
+ *
+ * Returned Value:
+ *   On success returns OK (0), otherwise a negative value.
+ ****************************************************************************/
+
+int sim_init_func_call_ipi(int irq)
+{
+  up_enable_irq(irq);
+  return irq_attach(irq, nxsched_smp_call_handler, NULL);
+}
+
+/****************************************************************************
+ * Name: up_send_smp_call
+ *
+ * Description:
+ *   Notify the cpuset cpus handler function calls.
+ *
+ ****************************************************************************/
+
+void up_send_smp_call(cpu_set_t cpuset)
+{
+  int cpu;
+
+  for (; cpuset != 0; cpuset &= ~(1 << cpu))
+    {
+      cpu = ffs(cpuset) - 1;
+      host_send_func_call_ipi(cpu);
+    }
+}
+#endif

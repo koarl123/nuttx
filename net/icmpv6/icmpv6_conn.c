@@ -1,6 +1,8 @@
 /****************************************************************************
  * net/icmpv6/icmpv6_conn.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -115,7 +117,7 @@ FAR struct icmpv6_conn_s *icmpv6_alloc(void)
         {
 #if CONFIG_NET_ICMPv6_MAX_CONNS > 0
           if (dq_count(&g_active_icmpv6_connections) +
-              CONFIG_NET_ICMPv6_ALLOC_CONNS >= CONFIG_NET_ICMPv6_MAX_CONNS)
+              CONFIG_NET_ICMPv6_ALLOC_CONNS > CONFIG_NET_ICMPv6_MAX_CONNS)
             {
               nxmutex_unlock(&g_free_lock);
               return NULL;

@@ -35,8 +35,8 @@ config DRIVERS_VIRTIO_GPU
 
 config DRIVERS_VIRTIO_INPUT
 	bool "Virtio input support"
+	depends on INPUT && INPUT_TOUCHSCREEN && INPUT_KEYBOARD && INPUT_MOUSE
 	default n
-	depends on INPUT
 
 config DRIVERS_VIRTIO_NET
 	bool "Virtio network support"
@@ -74,6 +74,14 @@ if DRIVERS_VIRTIO_SERIAL
 config DRIVERS_VIRTIO_SERIAL_BUFSIZE
 	int "Virtio serial driver buffer size"
 	default 256
+
+config DRIVERS_VIRTIO_SERIAL_CONSOLE
+	bool "Virtio serial console"
+	default n
+	select SERIAL_CONSOLE
+	---help---
+		This enables using first virtio serial device as console.
+
 endif
 
 config DRIVERS_VIRTIO_SOUND

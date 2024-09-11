@@ -64,6 +64,10 @@ ifeq ($(CONFIG_SPI_DRIVER),y)
   CSRCS += esp32_board_spidev.c
 endif
 
+ifeq ($(CONFIG_SPI_SLAVE_DRIVER),y)
+  CSRCS += esp32_board_spislavedev.c
+endif
+
 ifeq ($(CONFIG_ESP32_SPIFLASH),y)
   CSRCS += esp32_board_spiflash.c
 endif
@@ -140,8 +144,20 @@ ifeq ($(CONFIG_RGBLED),y)
   CSRCS += esp32_rgbled.c
 endif
 
-ifeq ($(CONFIG_ESP32_RMT),y)
-  CSRCS += esp32_rmt.c
+ifeq ($(CONFIG_ESP_RMT),y)
+  CSRCS += esp32_board_rmt.c
+endif
+
+#ifeq ($(CONFIG_DAC),y)
+  CSRCS += esp32_board_dac.c
+#endif
+
+ifeq ($(CONFIG_SENSORS_ZEROCROSS),y)
+  CSRCS += esp32_zerocross.c
+endif
+
+ifeq ($(CONFIG_ESP_MCPWM),y)
+  CSRCS += esp32_board_mcpwm.c
 endif
 
 DEPPATH += --dep-path src

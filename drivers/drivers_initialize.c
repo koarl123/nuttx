@@ -36,6 +36,7 @@
 #include <nuttx/net/tun.h>
 #include <nuttx/net/telnet.h>
 #include <nuttx/note/note_driver.h>
+#include <nuttx/pci/pci.h>
 #include <nuttx/power/pm.h>
 #include <nuttx/power/regulator.h>
 #include <nuttx/segger/rtt.h>
@@ -50,8 +51,43 @@
 #include <nuttx/drivers/optee.h>
 
 /****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+/* Check if only one console device is selected.
+ * If you get this errro, search your .config file for CONSOLE_XXX_CONSOLE
+ * options and remove what is not needed.
+ */
+
+#if (defined(CONFIG_LWL_CONSOLE) + defined(CONFIG_SERIAL_CONSOLE) + \
+     defined(CONFIG_CDCACM_CONSOLE) + defined(CONFIG_PL2303_CONSOLE) + \
+     defined(CONFIG_SERIAL_RTT_CONSOLE) + defined(CONFIG_RPMSG_UART_CONSOLE)) > 1
+#  error More than one console driver selected. Check your configuration !
+#endif
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
+
+/****************************************************************************
+ * Name: drivers_early_initialize
+ *
+ * Description:
+ *   drivers_early_initialize will be called once before OS initialization
+ *   when no system resource is ready to use.
+ *
+ *   drivers_early_initialize serves the purpose of bringing up drivers as
+ *   early as possible, so they can be used even during OS initialization.
+ *   It must not rely on any system resources, such as heap memory.
+ *
+ ****************************************************************************/
+
+void drivers_early_initialize(void)
+{
+#ifdef CONFIG_DRIVERS_NOTE
+  note_early_initialize();
+#endif
+}
 
 /****************************************************************************
  * Name: drivers_initialize
@@ -92,6 +128,10 @@ void drivers_initialize(void)
 
 #if defined(CONFIG_DEV_ZERO)
   devzero_register();   /* Standard /dev/zero */
+#endif
+
+#ifdef CONFIG_DEV_MEM
+  devmem_register();
 #endif
 
 #if defined(CONFIG_DEV_LOOP)
@@ -212,6 +252,10 @@ void drivers_initialize(void)
 
 #ifdef CONFIG_MTD_LOOP
   mtd_loop_register();
+#endif
+
+#ifdef CONFIG_PCI
+  pci_register_drivers();
 #endif
 
 #ifdef CONFIG_DRIVERS_VIRTIO

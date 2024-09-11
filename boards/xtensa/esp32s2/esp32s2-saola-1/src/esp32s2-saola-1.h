@@ -61,7 +61,7 @@
 #  define RMT_OUTPUT_PIN      0
 #else
 #  define RMT_INPUT_PIN       2
-#  define RMT_OUTPUT_PIN      4
+#  define RMT_OUTPUT_PIN      18
 #endif
 
 /****************************************************************************
@@ -102,7 +102,7 @@ int esp32s2_bringup(void);
  *
  ****************************************************************************/
 
-#ifdef CONFIG_ESP32S2_SPIFLASH
+#ifdef CONFIG_ESPRESSIF_SPIFLASH
 int board_spiflash_init(void);
 #endif
 

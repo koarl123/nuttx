@@ -34,6 +34,7 @@
 #include <arch/irq.h>
 #include <nuttx/sched.h>
 
+#include "sched/sched.h"
 #include "signal/signal.h"
 #include "exc_return.h"
 #include "arm_internal.h"
@@ -210,7 +211,7 @@ int arm_svcall(int irq, void *context, void *arg)
 #ifdef CONFIG_LIB_SYSCALL
       case SYS_syscall_return:
         {
-          struct tcb_s *rtcb = nxsched_self();
+          struct tcb_s *rtcb = this_task();
           int index = (int)rtcb->xcp.nsyscalls - 1;
 
           /* Make sure that there is a saved syscall return address. */
@@ -223,6 +224,7 @@ int arm_svcall(int irq, void *context, void *arg)
 
           regs[REG_PC]         = rtcb->xcp.syscall[index].sysreturn;
           regs[REG_EXC_RETURN] = rtcb->xcp.syscall[index].excreturn;
+          regs[REG_CONTROL]    = rtcb->xcp.syscall[index].ctrlreturn;
           rtcb->xcp.nsyscalls  = index;
 
           /* The return value must be in R0-R1.  dispatch_syscall()
@@ -332,7 +334,7 @@ int arm_svcall(int irq, void *context, void *arg)
 #ifdef CONFIG_BUILD_PROTECTED
       case SYS_signal_handler:
         {
-          struct tcb_s *rtcb   = nxsched_self();
+          struct tcb_s *rtcb   = this_task();
 
           /* Remember the caller's return address */
 
@@ -374,7 +376,7 @@ int arm_svcall(int irq, void *context, void *arg)
 #ifdef CONFIG_BUILD_PROTECTED
       case SYS_signal_handler_return:
         {
-          struct tcb_s *rtcb   = nxsched_self();
+          struct tcb_s *rtcb   = this_task();
 
           /* Set up to return to the kernel-mode signal dispatching logic. */
 
@@ -399,7 +401,7 @@ int arm_svcall(int irq, void *context, void *arg)
       default:
         {
 #ifdef CONFIG_LIB_SYSCALL
-          struct tcb_s *rtcb = nxsched_self();
+          struct tcb_s *rtcb = this_task();
           int index = rtcb->xcp.nsyscalls;
 
           /* Verify that the SYS call number is within range */
@@ -416,6 +418,7 @@ int arm_svcall(int irq, void *context, void *arg)
 
           rtcb->xcp.syscall[index].sysreturn  = regs[REG_PC];
           rtcb->xcp.syscall[index].excreturn  = regs[REG_EXC_RETURN];
+          rtcb->xcp.syscall[index].ctrlreturn = regs[REG_CONTROL];
           rtcb->xcp.nsyscalls  = index + 1;
 
           regs[REG_PC]         = (uint32_t)dispatch_syscall;
@@ -472,6 +475,11 @@ int arm_svcall(int irq, void *context, void *arg)
     }
 #  endif
 #endif
+
+  if (regs != CURRENT_REGS)
+    {
+      restore_critical_section(this_task(), this_cpu());
+    }
 
   return OK;
 }

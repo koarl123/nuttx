@@ -1,6 +1,8 @@
 /****************************************************************************
  * wireless/bluetooth/bt_hcicore.c
  *
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  *   Copyright (c) 2016, Intel Corporation
  *   All rights reserved.
  *
@@ -329,7 +331,7 @@ static void hci_cmd_done(uint16_t opcode, uint8_t status,
 
   if (g_btdev.sent_cmd->u.hci.opcode != opcode)
     {
-      wlerr("ERROR:  Unexpected completion of opcode 0x%04x " \
+      wlerr("ERROR:  Unexpected completion of opcode 0x%04x "
             "expected 0x%04x\n",
             opcode, g_btdev.sent_cmd->u.hci.opcode);
       return;

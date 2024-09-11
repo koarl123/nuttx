@@ -330,7 +330,7 @@ static int gpio_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
             (FAR enum gpio_pintype_e *)((uintptr_t)arg);
           DEBUGASSERT(ptr != NULL);
 
-          *ptr = dev->gp_pintype;
+          *ptr = (enum gpio_pintype_e)dev->gp_pintype;
           ret = OK;
         }
         break;
@@ -464,7 +464,7 @@ static int gpio_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
           /* Check if the argument is a valid pintype */
 
-          if (pintype < GPIO_INPUT_PIN || pintype >= GPIO_NPINTYPES)
+          if (pintype >= GPIO_NPINTYPES)
             {
               ret = -EINVAL;
               break;

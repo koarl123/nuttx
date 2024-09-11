@@ -276,12 +276,6 @@ void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
 
                   up_cpu_pause(cpu);
 
-                  /* Wait while the pause request is pending */
-
-                  while (up_cpu_pausereq(cpu))
-                    {
-                    }
-
                   /* Now tcb on the other CPU can be accessed safely */
 
                   /* Copy tcb->xcp.regs to tcp.xcp.saved. These will be
@@ -371,17 +365,6 @@ void up_schedule_sigaction(struct tcb_s *tcb, sig_deliver_t sigdeliver)
                   CURRENT_REGS[REG_CONTROL] = getcontrol() & ~CONTROL_NPRIV;
 #endif
                 }
-
-              /* In an SMP configuration, the interrupt disable logic also
-               * involves spinlocks that are configured per the TCB irqcount
-               * field.  This is logically equivalent to
-               * enter_critical_section().  The matching call to
-               * leave_critical_section() will be performed in
-               * arm_sigdeliver().
-               */
-
-              spin_setbit(&g_cpu_irqset, cpu, &g_cpu_irqsetlock,
-                          &g_cpu_irqlock);
 
               /* RESUME the other CPU if it was PAUSED */
 

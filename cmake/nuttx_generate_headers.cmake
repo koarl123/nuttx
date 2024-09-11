@@ -1,6 +1,8 @@
 # ##############################################################################
 # cmake/nuttx_generate_headers.cmake
 #
+# SPDX-License-Identifier: Apache-2.0
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more contributor
 # license agreements.  See the NOTICE file distributed with this work for
 # additional information regarding copyright ownership.  The ASF licenses this
@@ -49,8 +51,13 @@ if(NOT EXISTS ${CMAKE_BINARY_DIR}/include/arch)
 endif()
 
 if(NOT EXISTS ${CMAKE_BINARY_DIR}/include_arch/arch/board)
-  nuttx_create_symlink(${NUTTX_BOARD_DIR}/include
-                       ${CMAKE_BINARY_DIR}/include_arch/arch/board)
+  if(EXISTS ${NUTTX_BOARD_DIR}/include)
+    nuttx_create_symlink(${NUTTX_BOARD_DIR}/include
+                         ${CMAKE_BINARY_DIR}/include_arch/arch/board)
+  elseif(EXISTS ${NUTTX_BOARD_DIR}/../common/include)
+    nuttx_create_symlink(${NUTTX_BOARD_DIR}/../common/include
+                         ${CMAKE_BINARY_DIR}/include_arch/arch/board)
+  endif()
 endif()
 
 if(NOT EXISTS ${CMAKE_BINARY_DIR}/include_arch/arch/chip)
@@ -147,3 +154,7 @@ add_custom_target(
     $<$<BOOL:${NEED_MATH_H}>:${CMAKE_BINARY_DIR}/include/math.h>
     $<$<BOOL:${CONFIG_ARCH_FLOAT_H}>:${CMAKE_BINARY_DIR}/include/float.h>
     $<$<BOOL:${CONFIG_ARCH_SETJMP_H}>:${CMAKE_BINARY_DIR}/include/setjmp.h>)
+
+# apps_context is a PHONY target used as an intermediate process to control the
+# time order of context preparation actions of app building
+add_custom_target(apps_context ALL DEPENDS nuttx_context)

@@ -113,17 +113,26 @@
 /* The C standard states that if NDEBUG is defined, assert will do nothing.
  * Users can define and undefine NDEBUG as they see fit to choose when assert
  * does something or does not do anything.
+ *
+ * #define assert(ignore) ((void)0)
+ *
+ * Reference link:
+ * https://pubs.opengroup.org/onlinepubs/009695399/basedefs/assert.h.html
  */
 
 #ifdef NDEBUG
-#  define assert(f) ((void)(1 || (f)))
-#  define VERIFY(f) assert(f)
+#  define assert(f) ((void)0)
 #else
 #  define assert(f) _ASSERT(f, __ASSERT_FILE__, __ASSERT_LINE__)
-#  define VERIFY(f) _VERIFY(f, __ASSERT_FILE__, __ASSERT_LINE__)
 #endif
 
-#define ASSERT(f) assert(f)
+/* ASSERT/VERIFY are NuttX-specific APIs.
+ * They are always enabled, regardless of NDEBUG/CONFIG_DEBUG_ASSERTIONS.
+ * The argument is evaluated exactly once.
+ */
+
+#define ASSERT(f) _ASSERT(f, __ASSERT_FILE__, __ASSERT_LINE__)
+#define VERIFY(f) _VERIFY(f, __ASSERT_FILE__, __ASSERT_LINE__)
 
 /* Suppress 3rd party library redefine _assert/__assert */
 
@@ -142,6 +151,10 @@
        extern int (*__static_assert_function (void)) \
        [!!sizeof (struct { int __error_if_negative: (cond) ? 2 : -1; })]
 #  endif
+#endif
+
+#ifndef COMPILE_TIME_ASSERT
+#  define COMPILE_TIME_ASSERT(x) static_assert(x, "compile time assert failed")
 #endif
 
 /* Force a compilation error if condition is true, but also produce a

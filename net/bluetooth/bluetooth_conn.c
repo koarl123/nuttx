@@ -1,6 +1,8 @@
 /****************************************************************************
  * net/bluetooth/bluetooth_conn.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -125,7 +127,7 @@ FAR struct bluetooth_conn_s *bluetooth_conn_alloc(void)
     {
 #if CONFIG_NET_BLUETOOTH_MAX_CONNS > 0
       if (dq_count(&g_active_bluetooth_connections) +
-          CONFIG_NET_BLUETOOTH_ALLOC_CONNS >= CONFIG_NET_BLUETOOTH_MAX_CONNS)
+          CONFIG_NET_BLUETOOTH_ALLOC_CONNS > CONFIG_NET_BLUETOOTH_MAX_CONNS)
         {
           net_unlock();
           return NULL;

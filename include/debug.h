@@ -120,7 +120,7 @@
 #  define _alert      _none
 #elif defined(CONFIG_CPP_HAVE_VARARGS)
 #  define _alert(format, ...) \
-   __arch_syslog(LOG_EMERG, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
+   __arch_syslog(LOG_ALERT, EXTRA_FMT format EXTRA_ARG, ##__VA_ARGS__)
 #endif
 
 #if !defined(CONFIG_DEBUG_ERROR)
@@ -918,6 +918,42 @@
 #  define ipcinfo     _info
 #else
 #  define ipcinfo     _none
+#endif
+
+#ifdef CONFIG_DEBUG_PCI_ERROR
+#  define pcierr       _err
+#else
+#  define pcierr      _none
+#endif
+
+#ifdef CONFIG_DEBUG_PCI_WARN
+#  define pciwarn     _warn
+#else
+#  define pciwarn     _none
+#endif
+
+#ifdef CONFIG_DEBUG_PCI_INFO
+#  define pciinfo     _info
+#else
+#  define pciinfo     _none
+#endif
+
+#ifdef CONFIG_DEBUG_RPMSG_ERROR
+#  define rpmsgerr       _err
+#else
+#  define rpmsgerr      _none
+#endif
+
+#ifdef CONFIG_DEBUG_RPMSG_WARN
+#  define rpmsgwarn     _warn
+#else
+#  define rpmsgwarn     _none
+#endif
+
+#ifdef CONFIG_DEBUG_RPMSG_INFO
+#  define rpmsginfo     _info
+#else
+#  define rpmsginfo     _none
 #endif
 
 /* Buffer dumping macros do not depend on varargs */

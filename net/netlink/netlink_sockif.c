@@ -1,6 +1,8 @@
 /****************************************************************************
  * net/netlink/netlink_sockif.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -126,6 +128,11 @@ static int netlink_setup(FAR struct socket *psock)
     {
 #ifdef CONFIG_NETLINK_ROUTE
       case NETLINK_ROUTE:
+        break;
+#endif
+
+#ifdef CONFIG_NETLINK_NETFILTER
+      case NETLINK_NETFILTER:
         break;
 #endif
 
@@ -618,6 +625,15 @@ static ssize_t netlink_sendmsg(FAR struct socket *psock,
                                    msg->msg_iov->iov_len, flags,
                                    (FAR const struct sockaddr_nl *)to,
                                    tolen);
+        break;
+#endif
+
+#ifdef CONFIG_NETLINK_NETFILTER
+      case NETLINK_NETFILTER:
+        ret = netlink_netfilter_sendto(conn, nlmsg,
+                                       msg->msg_iov->iov_len, flags,
+                                       (FAR const struct sockaddr_nl *)to,
+                                       tolen);
         break;
 #endif
 

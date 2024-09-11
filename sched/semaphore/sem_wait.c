@@ -1,6 +1,8 @@
 /****************************************************************************
  * sched/semaphore/sem_wait.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -84,7 +86,7 @@ int nxsem_wait(FAR sem_t *sem)
    * handler.
    */
 
-  flags = enter_critical_section();
+  flags = enter_critical_section_nonirq();
 
   /* Make sure we were supplied with a valid semaphore. */
 
@@ -93,6 +95,13 @@ int nxsem_wait(FAR sem_t *sem)
   if (sem->semcount > 0)
     {
       /* It is, let the task take the semaphore. */
+
+      ret = nxsem_protect_wait(sem);
+      if (ret < 0)
+        {
+          leave_critical_section_nonirq(flags);
+          return ret;
+        }
 
       sem->semcount--;
       nxsem_add_holder(sem);
@@ -215,7 +224,7 @@ int nxsem_wait(FAR sem_t *sem)
 #endif
     }
 
-  leave_critical_section(flags);
+  leave_critical_section_nonirq(flags);
   return ret;
 }
 

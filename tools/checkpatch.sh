@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # tools/checkpatch.sh
 #
+# SPDX-License-Identifier: Apache-2.0
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
@@ -101,7 +103,7 @@ check_file() {
     elif ! cmake-format --check $@ 2>&1; then
       if [ $cmake_warning_once == 0 ]; then
         echo -e "\ncmake-format check failed, run following command to update the style:"
-        echo -e "  $ cmake-format -o <src> <dst>\n"
+        echo -e "  $ cmake-format <src> -o <dst>\n"
         cmake-format --check $@ 2>&1
         cmake_warning_once=1
       fi

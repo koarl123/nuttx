@@ -68,7 +68,7 @@ static inline bool arm_from_thread(uint32_t excret)
       return true;
     }
 
-#ifdef CONFIG_ARCH_HAVE_TRUSTZONE
+#if defined(CONFIG_ARCH_TRUSTZONE_SECURE)
   if (!(excret & EXC_RETURN_SECURE_STACK) &&
       (excret & EXC_RETURN_EXC_SECURE))
     {
@@ -128,7 +128,6 @@ uint32_t *arm_doirq(int irq, uint32_t *regs)
 
           g_running_tasks[this_cpu()] = this_task();
 
-          restore_critical_section();
           regs = (uint32_t *)CURRENT_REGS;
         }
 
@@ -141,7 +140,7 @@ uint32_t *arm_doirq(int irq, uint32_t *regs)
   board_autoled_off(LED_INIRQ);
 
 #ifdef CONFIG_ARMV8M_TRUSTZONE_HYBRID
-  if (((1 << up_cpu_index()) & CONFIG_ARMV8M_TRUSTZONE_CPU_BITMASK) == 0)
+  if (((1 << this_cpu()) & CONFIG_ARMV8M_TRUSTZONE_CPU_BITMASK) == 0)
     {
       regs[REG_EXC_RETURN] &=
         ~(EXC_RETURN_EXC_SECURE | EXC_RETURN_SECURE_STACK);

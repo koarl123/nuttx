@@ -71,8 +71,13 @@ ifeq ($(CONFIG_ADC),y)
 CSRCS += stm32_adc.c
 endif
 
+<<<<<<< HEAD
 ifeq ($(CONFIG_DEV_GPIO),y)
 CSRCS += stm32_gpio.c
+=======
+ifeq ($(CONFIG_STM32_CAN_CHARDRIVER),y)
+CSRCS += stm32_can.c
+>>>>>>> master
 endif
 
 ifeq ($(CONFIG_STM32F429I_DISCO_HIGHPRI),y)

@@ -86,7 +86,7 @@ static volatile spinlock_t g_cpu_resumed[CONFIG_SMP_NCPUS];
 
 static void rp2040_handle_irqreq(int irqreq)
 {
-  DEBUGASSERT(up_cpu_index() == 0);
+  DEBUGASSERT(this_cpu() == 0);
 
   /* Unlock the spinlock first */
 
@@ -135,6 +135,48 @@ bool up_cpu_pausereq(int cpu)
 }
 
 /****************************************************************************
+ * Name: up_cpu_paused_save
+ *
+ * Description:
+ *   Handle a pause request from another CPU.  Normally, this logic is
+ *   executed from interrupt handling logic within the architecture-specific
+ *   However, it is sometimes necessary to perform the pending
+ *   pause operation in other contexts where the interrupt cannot be taken
+ *   in order to avoid deadlocks.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   On success, OK is returned.  Otherwise, a negated errno value indicating
+ *   the nature of the failure is returned.
+ *
+ ****************************************************************************/
+
+int up_cpu_paused_save(void)
+{
+  struct tcb_s *tcb = this_task();
+
+  /* Update scheduler parameters */
+
+  nxsched_suspend_scheduler(tcb);
+
+#ifdef CONFIG_SCHED_INSTRUMENTATION
+  /* Notify that we are paused */
+
+  sched_note_cpu_paused(tcb);
+#endif
+
+  /* Save the current context at CURRENT_REGS into the TCB at the head
+   * of the assigned task list for this CPU.
+   */
+
+  arm_savestate(tcb->xcp.regs);
+
+  return OK;
+}
+
+/****************************************************************************
  * Name: up_cpu_paused
  *
  * Description:
@@ -163,24 +205,6 @@ bool up_cpu_pausereq(int cpu)
 
 int up_cpu_paused(int cpu)
 {
-  struct tcb_s *tcb = this_task();
-
-  /* Update scheduler parameters */
-
-  nxsched_suspend_scheduler(tcb);
-
-#ifdef CONFIG_SCHED_INSTRUMENTATION
-  /* Notify that we are paused */
-
-  sched_note_cpu_paused(tcb);
-#endif
-
-  /* Save the current context at CURRENT_REGS into the TCB at the head
-   * of the assigned task list for this CPU.
-   */
-
-  arm_savestate(tcb->xcp.regs);
-
   /* Wait for the spinlock to be released */
 
   spin_unlock(&g_cpu_paused[cpu]);
@@ -191,11 +215,31 @@ int up_cpu_paused(int cpu)
 
   spin_lock(&g_cpu_wait[cpu]);
 
-  /* Restore the exception context of the tcb at the (new) head of the
-   * assigned task list.
-   */
+  spin_unlock(&g_cpu_wait[cpu]);
+  spin_unlock(&g_cpu_resumed[cpu]);
 
-  tcb = this_task();
+  return OK;
+}
+
+/****************************************************************************
+ * Name: up_cpu_paused_restore
+ *
+ * Description:
+ *  Restore the state of the CPU after it was paused via up_cpu_pause(),
+ *  and resume normal tasking.
+ *
+ * Input Parameters:
+ *  None
+ *
+ * Returned Value:
+ *   On success, OK is returned.  Otherwise, a negated errno value indicating
+ *   the nature of the failure is returned.
+ *
+ ****************************************************************************/
+
+int up_cpu_paused_restore(void)
+{
+  struct tcb_s *tcb = this_task();
 
 #ifdef CONFIG_SCHED_INSTRUMENTATION
   /* Notify that we have resumed */
@@ -212,8 +256,6 @@ int up_cpu_paused(int cpu)
    */
 
   arm_restorestate(tcb->xcp.regs);
-  spin_unlock(&g_cpu_wait[cpu]);
-  spin_unlock(&g_cpu_resumed[cpu]);
 
   return OK;
 }
@@ -234,9 +276,11 @@ int up_cpu_paused(int cpu)
 
 int arm_pause_handler(int irq, void *c, void *arg)
 {
-  int cpu = up_cpu_index();
+  int cpu = this_cpu();
   int irqreq;
   uint32_t stat;
+
+  nxsched_smp_call_handler(irq, c, arg);
 
   stat = getreg32(RP2040_SIO_FIFO_ST);
   if (stat & (RP2040_SIO_FIFO_ST_ROE | RP2040_SIO_FIFO_ST_WOF))
@@ -292,6 +336,61 @@ int arm_pause_handler(int irq, void *c, void *arg)
 }
 
 /****************************************************************************
+ * Name: up_cpu_pause_async
+ *
+ * Description:
+ *   pause task execution on the CPU
+ *   check whether there are tasks delivered to specified cpu
+ *   and try to run them.
+ *
+ * Input Parameters:
+ *   cpu - The index of the CPU to be paused.
+ *
+ * Returned Value:
+ *   Zero on success; a negated errno value on failure.
+ *
+ * Assumptions:
+ *   Called from within a critical section;
+ *
+ ****************************************************************************/
+
+inline_function int up_cpu_pause_async(int cpu)
+{
+  /* Generate IRQ for CPU(cpu) */
+
+  while (!(getreg32(RP2040_SIO_FIFO_ST) & RP2040_SIO_FIFO_ST_RDY))
+    ;
+  putreg32(0, RP2040_SIO_FIFO_WR);
+
+  return OK;
+}
+
+/****************************************************************************
+ * Name: up_send_smp_call
+ *
+ * Description:
+ *   Send smp call to target cpu.
+ *
+ * Input Parameters:
+ *   cpuset - The set of CPUs to receive the SGI.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+void up_send_smp_call(cpu_set_t cpuset)
+{
+  int cpu;
+
+  for (; cpuset != 0; cpuset &= ~(1 << cpu))
+    {
+      cpu = ffs(cpuset) - 1;
+      up_cpu_pause_async(cpu);
+    }
+}
+
+/****************************************************************************
  * Name: up_cpu_pause
  *
  * Description:
@@ -337,13 +436,11 @@ int up_cpu_pause(int cpu)
   spin_lock(&g_cpu_wait[cpu]);
   spin_lock(&g_cpu_paused[cpu]);
 
-  DEBUGASSERT(cpu != up_cpu_index());
+  DEBUGASSERT(cpu != this_cpu());
 
   /* Generate IRQ for CPU(cpu) */
 
-  while (!(getreg32(RP2040_SIO_FIFO_ST) & RP2040_SIO_FIFO_ST_RDY))
-    ;
-  putreg32(0, RP2040_SIO_FIFO_WR);
+  up_cpu_pause_async(cpu);
 
   /* Wait for the other CPU to unlock g_cpu_paused meaning that
    * it is fully paused and ready for up_cpu_resume();
@@ -357,7 +454,7 @@ int up_cpu_pause(int cpu)
    * called.  g_cpu_paused will be unlocked in any case.
    */
 
-  return 0;
+  return OK;
 }
 
 /****************************************************************************
@@ -406,7 +503,7 @@ int up_cpu_resume(int cpu)
   spin_lock(&g_cpu_resumed[cpu]);
 
   spin_unlock(&g_cpu_resumed[cpu]);
-  return 0;
+  return OK;
 }
 
 /****************************************************************************

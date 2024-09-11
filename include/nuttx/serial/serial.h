@@ -88,6 +88,9 @@
 #define uart_send(dev,ch)        dev->ops->send(dev,ch)
 #define uart_receive(dev,s)      dev->ops->receive(dev,s)
 
+#define uart_release(dev)      \
+  ((dev)->ops->release ? (dev)->ops->release(dev) : -ENOSYS)
+
 #ifdef CONFIG_SERIAL_TXDMA
 #define uart_dmasend(dev)      \
   ((dev)->ops->dmasend ? (dev)->ops->dmasend(dev) : -ENOSYS)
@@ -254,6 +257,12 @@ struct uart_ops_s
    */
 
   CODE bool (*txempty)(FAR struct uart_dev_s *dev);
+
+  /* Call to release some resource about the device when device was close
+   * and unregistered.
+   */
+
+  CODE int (*release)(FAR struct uart_dev_s *dev);
 };
 
 /* This is the device structure used by the driver.  The caller of
@@ -276,6 +285,7 @@ struct uart_dev_s
   volatile bool        disconnected; /* true: Removable device is not connected */
 #endif
   bool                 isconsole;    /* true: This is the serial console */
+  bool                 unlinked;     /* true: This device driver has been unlinked. */
 
 #if defined(CONFIG_TTY_SIGINT) || defined(CONFIG_TTY_SIGTSTP) || \
     defined(CONFIG_TTY_FORCE_PANIC) || defined(CONFIG_TTY_LAUNCH)
@@ -312,7 +322,7 @@ struct uart_dev_s
   /* Driver interface */
 
   FAR const struct uart_ops_s *ops;  /* Arch-specific operations */
-  FAR void            *priv;         /* Used by the arch-specific logic */
+  FAR void                    *priv; /* Used by the arch-specific logic */
 
   /* The following is a list if poll structures of threads waiting for
    * driver events. The 'struct pollfd' reference for each open is also
@@ -325,7 +335,7 @@ struct uart_dev_s
   uint8_t timeout;                   /* c_cc[VTIME] */
 #endif
 
-  struct pollfd *fds[CONFIG_SERIAL_NPOLLWAITERS];
+  FAR struct pollfd *fds[CONFIG_SERIAL_NPOLLWAITERS];
 };
 
 typedef struct uart_dev_s uart_dev_t;
@@ -519,7 +529,8 @@ void uart_reset_sem(FAR uart_dev_t *dev);
 
 #if defined(CONFIG_TTY_SIGINT) || defined(CONFIG_TTY_SIGTSTP) || \
     defined(CONFIG_TTY_FORCE_PANIC) || defined(CONFIG_TTY_LAUNCH)
-int uart_check_special(FAR uart_dev_t *dev, const char *buf, size_t size);
+int uart_check_special(FAR uart_dev_t *dev, FAR const char *buf,
+                       size_t size);
 #endif
 
 /****************************************************************************

@@ -32,6 +32,7 @@
 #include <nuttx/arch.h>
 #include <sys/syscall.h>
 
+#include "sched/sched.h"
 #include "chip.h"
 #include "signal/signal.h"
 #include "xtensa.h"
@@ -159,7 +160,7 @@ int xtensa_swint(int irq, void *context, void *arg)
 #ifdef CONFIG_LIB_SYSCALL
       case SYS_syscall_return:
         {
-          struct tcb_s *rtcb = nxsched_self();
+          struct tcb_s *rtcb = this_task();
           int index = (int)rtcb->xcp.nsyscalls - 1;
 
           /* Make sure that there is a saved syscall return address. */
@@ -298,7 +299,7 @@ int xtensa_swint(int irq, void *context, void *arg)
 #ifndef CONFIG_BUILD_FLAT
       case SYS_signal_handler:
         {
-          struct tcb_s *rtcb  = nxsched_self();
+          struct tcb_s *rtcb  = this_task();
 
           /* Remember the caller's return address */
 
@@ -337,7 +338,7 @@ int xtensa_swint(int irq, void *context, void *arg)
 #ifndef CONFIG_BUILD_FLAT
       case SYS_signal_handler_return:
         {
-          struct tcb_s *rtcb  = nxsched_self();
+          struct tcb_s *rtcb  = this_task();
 
           /* Set up to return to the kernel-mode signal dispatching logic. */
 
@@ -359,7 +360,7 @@ int xtensa_swint(int irq, void *context, void *arg)
       default:
         {
 #ifdef CONFIG_LIB_SYSCALL
-          struct tcb_s *rtcb = nxsched_self();
+          struct tcb_s *rtcb = this_task();
           int index = rtcb->xcp.nsyscalls;
 
           /* Verify that the syscall number is within range */
@@ -431,13 +432,18 @@ int xtensa_swint(int irq, void *context, void *arg)
   if (regs != CURRENT_REGS)
     {
       svcinfo("SYSCALL Return: Context switch!\n");
-      up_dump_register(CURRENT_REGS);
+      up_dump_register((void *)CURRENT_REGS);
     }
   else
     {
       svcinfo("SYSCALL Return: %" PRIu32 "\n", cmd);
     }
 #endif
+
+  if (regs != CURRENT_REGS)
+    {
+      restore_critical_section(this_task(), this_cpu());
+    }
 
   return OK;
 }

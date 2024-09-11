@@ -1,6 +1,8 @@
 /****************************************************************************
  * net/local/local_netpoll.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -46,8 +48,6 @@ static int local_event_pollsetup(FAR struct local_conn_s *conn,
                                  FAR struct pollfd *fds,
                                  bool setup)
 {
-  pollevent_t eventset;
-  int ret = OK;
   int i;
 
   if (setup)
@@ -80,20 +80,17 @@ static int local_event_pollsetup(FAR struct local_conn_s *conn,
           return -EBUSY;
         }
 
-      eventset = 0;
       if (conn->lc_state == LOCAL_STATE_LISTENING &&
           dq_peek(&conn->u.server.lc_waiters) != NULL)
         {
-          eventset |= POLLIN;
+          poll_notify(&fds, 1, POLLIN);
         }
-
-      poll_notify(&fds, 1, eventset);
     }
   else
     {
       /* This is a request to tear down the poll. */
 
-      struct pollfd **slot = (struct pollfd **)fds->priv;
+      FAR struct pollfd **slot = (FAR struct pollfd **)fds->priv;
 
       nxmutex_lock(&conn->lc_polllock);
 
@@ -108,7 +105,7 @@ static int local_event_pollsetup(FAR struct local_conn_s *conn,
       nxmutex_unlock(&conn->lc_polllock);
     }
 
-  return ret;
+  return OK;
 }
 
 /****************************************************************************
@@ -121,7 +118,6 @@ static void local_inout_poll_cb(FAR struct pollfd *fds)
 
   poll_notify(&originfds, 1, fds->revents);
 }
-
 #endif
 
 /****************************************************************************
@@ -160,14 +156,12 @@ void local_event_pollnotify(FAR struct local_conn_s *conn,
 
 int local_pollsetup(FAR struct socket *psock, FAR struct pollfd *fds)
 {
-  FAR struct local_conn_s *conn;
-  int ret = -ENOSYS;
-
-  conn = psock->s_conn;
+  FAR struct local_conn_s *conn = psock->s_conn;
+  int ret = OK;
 
   if (conn->lc_proto == SOCK_DGRAM)
     {
-      return ret;
+      return -ENOSYS;
     }
 
 #ifdef CONFIG_NET_LOCAL_STREAM
@@ -280,7 +274,6 @@ int local_pollsetup(FAR struct socket *psock, FAR struct pollfd *fds)
         break;
 
       default:
-        ret = OK;
         break;
     }
 #endif
@@ -312,10 +305,8 @@ pollerr:
 
 int local_pollteardown(FAR struct socket *psock, FAR struct pollfd *fds)
 {
-  FAR struct local_conn_s *conn;
+  FAR struct local_conn_s *conn = psock->s_conn;
   int ret = OK;
-
-  conn = psock->s_conn;
 
   if (conn->lc_proto == SOCK_DGRAM)
     {

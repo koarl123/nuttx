@@ -1,6 +1,8 @@
 # ##############################################################################
 # sched/sched/CMakeLists.txt
 #
+# SPDX-License-Identifier: Apache-2.0
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more contributor
 # license agreements.  See the NOTICE file distributed with this work for
 # additional information regarding copyright ownership.  The ASF licenses this
@@ -108,10 +110,6 @@ else()
   list(APPEND SRCS sched_processtimer.c)
 endif()
 
-if(CONFIG_SMP)
-  list(APPEND SRCS sched_thistask.c)
-endif()
-
 if(CONFIG_SCHED_CRITMONITOR)
   list(APPEND SRCS sched_critmonitor.c)
 endif()
@@ -120,7 +118,11 @@ if(CONFIG_SCHED_BACKTRACE)
   list(APPEND SRCS sched_backtrace.c)
 endif()
 
-if(CONFIG_SMP_CALL)
+if(CONFIG_DUMP_ON_EXIT)
+  list(APPEND SRCS sched_dumponexit.c)
+endif()
+
+if(CONFIG_SMP)
   list(APPEND SRCS sched_smp.c)
 endif()
 

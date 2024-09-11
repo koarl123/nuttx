@@ -123,10 +123,9 @@ endif()
 
 if(CONFIG_SIM_SOUND_ALSA)
   list(APPEND SRCS posix/sim_alsa.c)
-  list(APPEND SRCS posix/sim_offload.c)
+  list(APPEND SRCS sim_offload.c)
   list(APPEND STDLIBS asound)
   list(APPEND STDLIBS mad)
-  list(APPEND STDLIBS mp3lame)
 endif()
 
 # host sources ###############################################################
@@ -155,6 +154,16 @@ if(CONFIG_SIM_CAMERA_V4L2)
   list(APPEND STDLIBS v4l2)
 endif()
 
+if(CONFIG_SIM_VIDEO_DECODER)
+  list(APPEND SRCS sim_decoder.c)
+  list(APPEND SRCS sim_openh264dec.c)
+endif()
+
+if(CONFIG_SIM_VIDEO_ENCODER)
+  list(APPEND SRCS sim_encoder.c)
+  list(APPEND SRCS sim_x264encoder.c)
+endif()
+
 if(CONFIG_SPINLOCK)
   list(APPEND HOSTSRCS sim_testset.c)
 endif()
@@ -166,7 +175,12 @@ endif()
 
 if(CONFIG_SIM_X11FB)
   list(APPEND HOSTSRCS sim_x11framebuffer.c)
-  list(APPEND STDLIBS X11 Xext)
+
+  find_package(X11 REQUIRED)
+  if(X11_FOUND)
+    target_include_directories(nuttx PRIVATE ${X11_INCLUDE_DIR})
+    target_link_libraries(nuttx PRIVATE ${X11_LIBRARIES})
+  endif()
 
   if(CONFIG_SIM_TOUCHSCREEN)
     list(APPEND SRCS sim_touchscreen.c)

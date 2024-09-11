@@ -56,7 +56,7 @@
  * Public Functions
  ****************************************************************************/
 
-uintptr_t *riscv_doirq(int irq, uintptr_t *regs)
+uintreg_t *riscv_doirq(int irq, uintreg_t *regs)
 {
   board_autoled_on(LED_INIRQ);
 #ifdef CONFIG_SUPPRESS_INTERRUPTS
@@ -109,17 +109,13 @@ uintptr_t *riscv_doirq(int irq, uintptr_t *regs)
 
       g_running_tasks[this_cpu()] = this_task();
 
-      /* Restore the cpu lock */
-
-      restore_critical_section();
-
       /* If a context switch occurred while processing the interrupt then
        * CURRENT_REGS may have change value.  If we return any value
        * different from the input regs, then the lower level will know
        * that a context switch occurred during interrupt processing.
        */
 
-      regs = (uintptr_t *)CURRENT_REGS;
+      regs = (uintreg_t *)CURRENT_REGS;
     }
 
   /* Set CURRENT_REGS to NULL to indicate that we are no longer in an

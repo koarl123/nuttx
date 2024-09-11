@@ -1,6 +1,7 @@
 /****************************************************************************
  * net/ipfrag/ipv4_frag.c
- * Handling incoming IPv4 fragment input
+ *
+ * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -378,7 +379,7 @@ int32_t ipv4_fragout(FAR struct net_driver_s *dev, uint16_t mtu)
    */
 
   nfrags = ip_fragout_slice(dev->d_iob, PF_INET, mtu, hdrlen, &fragq);
-  assert(nfrags > 1);
+  ASSERT(nfrags > 1);
   netdev_iob_clear(dev);
 
   /* Fill the L3 header into the reserved space */

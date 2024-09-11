@@ -1,6 +1,8 @@
 /****************************************************************************
  * sched/sched/sched_cpuselect.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -77,7 +79,7 @@ int nxsched_select_cpu(cpu_set_t affinity)
       if ((affinity & (1 << i)) != 0)
         {
           FAR struct tcb_s *rtcb = (FAR struct tcb_s *)
-                                   g_assignedtasks[i].head;
+                                   list_assignedtasks(i)->head;
 
           /* If this CPU is executing its IDLE task, then use it.  The
            * IDLE task is always the last task in the assigned task list.

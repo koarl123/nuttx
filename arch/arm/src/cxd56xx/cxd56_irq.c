@@ -413,7 +413,7 @@ void up_disable_irq(int irq)
 
       /* If a different cpu requested, send an irq request */
 
-      if (cpu != (int8_t)up_cpu_index())
+      if (cpu != (int8_t)this_cpu())
         {
           up_send_irqreq(1, irq, cpu);
           return;
@@ -462,7 +462,7 @@ void up_enable_irq(int irq)
   if (irq >= CXD56_IRQ_EXTINT)
     {
 #ifdef CONFIG_SMP
-      int cpu = up_cpu_index();
+      int cpu = this_cpu();
 
       /* Set the caller cpu for this irq */
 
@@ -573,23 +573,7 @@ int up_prioritize_irq(int irq, int priority)
 #endif
 
 /****************************************************************************
- * Name: arm_intstack_top
- *
- * Description:
- *   Return a pointer to the top the correct interrupt stack allocation
- *   for the current CPU.
- *
- ****************************************************************************/
-
-#if defined(CONFIG_SMP) && CONFIG_ARCH_INTERRUPTSTACK > 7
-uintptr_t arm_intstack_top(void)
-{
-  return g_cpu_intstack_top[up_cpu_index()];
-}
-#endif
-
-/****************************************************************************
- * Name: arm_intstack_alloc
+ * Name: up_get_intstackbase
  *
  * Description:
  *   Return a pointer to the "alloc" the correct interrupt stack allocation
@@ -598,8 +582,8 @@ uintptr_t arm_intstack_top(void)
  ****************************************************************************/
 
 #if defined(CONFIG_SMP) && CONFIG_ARCH_INTERRUPTSTACK > 7
-uintptr_t arm_intstack_alloc(void)
+uintptr_t up_get_intstackbase(int cpu)
 {
-  return g_cpu_intstack_top[up_cpu_index()] - INTSTACK_SIZE;
+  return g_cpu_intstack_top[cpu] - INTSTACK_SIZE;
 }
 #endif

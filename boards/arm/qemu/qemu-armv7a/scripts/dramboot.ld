@@ -26,6 +26,20 @@ PHDRS
 SECTIONS
 {
   . = 0x40101000;
+
+  /* where the global variable out-of-bounds detection information located */
+#ifdef CONFIG_MM_KASAN_GLOBAL
+  .kasan.unused :
+  {
+    *(.data..LASANLOC*)
+  } > ROM
+  .kasan.global :
+  {
+    KEEP (*(.data..LASAN0))
+    KEEP (*(.data.rel.local..LASAN0))
+  } > ROM
+#endif
+
   .text : {
         _stext = .;            /* Text section */
        *(.vectors)
@@ -39,7 +53,7 @@ SECTIONS
   .init_section : {
         _sinit = ABSOLUTE(.);
         KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*) SORT_BY_INIT_PRIORITY(.ctors.*)))
-        KEEP(*(.init_array .ctors))
+        KEEP(*(.init_array EXCLUDE_FILE(*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o) .ctors))
         _einit = ABSOLUTE(.);
   } :text
   . = ALIGN(4096);

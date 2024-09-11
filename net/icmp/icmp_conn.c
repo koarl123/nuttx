@@ -1,6 +1,8 @@
 /****************************************************************************
  * net/icmp/icmp_conn.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -114,7 +116,7 @@ FAR struct icmp_conn_s *icmp_alloc(void)
         {
 #if CONFIG_NET_ICMP_MAX_CONNS > 0
           if (dq_count(&g_active_icmp_connections) +
-              CONFIG_NET_ICMP_ALLOC_CONNS >= CONFIG_NET_ICMP_MAX_CONNS)
+              CONFIG_NET_ICMP_ALLOC_CONNS > CONFIG_NET_ICMP_MAX_CONNS)
             {
               nxmutex_unlock(&g_free_lock);
               return NULL;

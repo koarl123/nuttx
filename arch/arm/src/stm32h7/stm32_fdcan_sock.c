@@ -33,7 +33,6 @@
 #include <debug.h>
 #include <errno.h>
 
-#include <nuttx/can.h>
 #include <nuttx/wdog.h>
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
@@ -41,7 +40,6 @@
 #include <nuttx/signal.h>
 #include <nuttx/net/netdev.h>
 #include <nuttx/net/can.h>
-#include <netpacket/can.h>
 
 #if defined(CONFIG_NET_CAN_RAW_TX_DEADLINE) || defined(CONFIG_NET_TIMESTAMP)
 #include <sys/time.h>
@@ -549,7 +547,7 @@ static void fdcan_dumpregs(struct fdcan_driver_s *priv)
       /* Protocol error -- check protocol status register for details */
 
       regval = getreg32(priv->base + STM32_FDCAN_PSR_OFFSET);
-      printf("--PSR.LEC = %d\n", regval & FDCAN_PSR_LEC);
+      printf("--PSR.LEC = %" PRId32 "\n", regval & FDCAN_PSR_LEC_MASK);
     }
 }
 #endif
@@ -1142,8 +1140,10 @@ static void fdcan_receive_work(void *arg)
       /* Read the frame contents */
 
 #ifdef CONFIG_NET_CAN_CANFD
-      if (rf->header.fdf) /* CAN FD frame */
+      if (rf->header.fdf)
         {
+          /* CAN FD frame */
+
           struct canfd_frame *frame = (struct canfd_frame *)priv->rx_pool;
 
           if (rf->header.id.xtd)
@@ -1181,9 +1181,11 @@ static void fdcan_receive_work(void *arg)
           priv->dev.d_len = sizeof(struct canfd_frame);
           priv->dev.d_buf = (uint8_t *)frame;
         }
-      else /* CAN 2.0 Frame */
+      else
 #endif
         {
+          /* CAN 2.0 Frame */
+
           struct can_frame *frame = (struct can_frame *)priv->rx_pool;
 
           if (rf->header.id.xtd)
@@ -2080,7 +2082,7 @@ int fdcan_initialize(struct fdcan_driver_s *priv)
     }
 
 #ifdef CONFIG_STM32H7_FDCAN_REGDEBUG
-  const fdcan_bitseg *tim = &priv->arbi_timing;
+  const struct fdcan_bitseg *tim = &priv->arbi_timing;
   ninfo("[fdcan][arbi] Timings: presc=%u sjw=%u bs1=%u bs2=%u\r\n",
         tim->prescaler, tim->sjw, tim->bs1, tim->bs2);
 #endif
@@ -2104,7 +2106,7 @@ int fdcan_initialize(struct fdcan_driver_s *priv)
     }
 
 #ifdef CONFIG_STM32H7_FDCAN_REGDEBUG
-  const fdcan_bitseg *tim = &priv->data_timing;
+  tim = &priv->data_timing;
   ninfo("[fdcan][data] Timings: presc=%u sjw=%u bs1=%u bs2=%u\r\n",
         tim->prescaler, tim->sjw, tim->bs1, tim->bs2);
 #endif

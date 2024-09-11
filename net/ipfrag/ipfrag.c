@@ -1,6 +1,7 @@
 /****************************************************************************
  * net/ipfrag/ipfrag.c
- * Handling incoming IPv4 and IPv6 fragment input
+ *
+ * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -171,8 +172,10 @@ ip_fragout_allocfragbuf(FAR struct iob_queue_s *fragq);
 
 static void ip_fragin_timerout_expiry(wdparm_t arg)
 {
-  assert(g_wkfragtimeout.worker == NULL);
-  work_queue(IPFRAGWORK, &g_wkfragtimeout, ip_fragin_timerwork, NULL, 0);
+  if (g_wkfragtimeout.worker == NULL)
+    {
+      work_queue(IPFRAGWORK, &g_wkfragtimeout, ip_fragin_timerwork, NULL, 0);
+    }
 }
 
 /****************************************************************************
@@ -525,7 +528,7 @@ ip_fragout_allocfragbuf(FAR struct iob_queue_s *fragq)
 uint32_t ip_frag_remnode(FAR struct ip_fragsnode_s *node)
 {
   g_bufoccupy -= node->bufcnt;
-  assert(g_bufoccupy < CONFIG_IOB_NBUFFERS);
+  ASSERT(g_bufoccupy < CONFIG_IOB_NBUFFERS);
 
   sq_rem((FAR sq_entry_t *)node, &g_assemblyhead_ipid);
   sq_rem((FAR sq_entry_t *)&node->flinkat, &g_assemblyhead_time);
@@ -799,7 +802,7 @@ int32_t ip_fragout_slice(FAR struct iob_s *iob, uint8_t domain, uint16_t mtu,
       return 0;
     }
 
-  assert(iob->io_pktlen > mtu);
+  ASSERT(iob->io_pktlen > mtu);
 
 #ifdef CONFIG_NET_IPv4
   if (domain == PF_INET)

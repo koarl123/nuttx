@@ -498,7 +498,7 @@ static int noteram_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
           }
         else
           {
-            *(unsigned int *)arg = drv->ni_overwrite;
+            *(FAR unsigned int *)arg = drv->ni_overwrite;
             ret = OK;
           }
         break;
@@ -515,7 +515,7 @@ static int noteram_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
           }
         else
           {
-            drv->ni_overwrite = *(unsigned int *)arg;
+            drv->ni_overwrite = *(FAR unsigned int *)arg;
             ret = OK;
           }
         break;
@@ -624,7 +624,7 @@ static void noteram_dump_init_context(FAR struct noteram_dump_context_s *ctx)
  * Name: get_task_name
  ****************************************************************************/
 
-static const char *get_task_name(pid_t pid)
+static FAR const char *get_task_name(pid_t pid)
 {
   FAR const char *taskname;
 
@@ -956,7 +956,7 @@ static int noteram_dump_one(FAR uint8_t *p, FAR struct lib_outstream_s *s,
       {
         FAR struct note_binary_s *nbi = (FAR struct note_binary_s *)p;
         char c = note->nc_type == NOTE_DUMP_BEGIN ? 'B' : 'E';
-        int len = note->nc_length - sizeof(struct note_binary_s);
+        int len = note->nc_length - SIZEOF_NOTE_EVENT(0);
         uintptr_t ip;
 
         ip = nbi->nbi_ip;

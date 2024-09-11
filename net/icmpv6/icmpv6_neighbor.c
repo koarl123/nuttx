@@ -1,6 +1,8 @@
 /****************************************************************************
  * net/icmpv6/icmpv6_neighbor.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -214,6 +216,17 @@ int icmpv6_neighbor(FAR struct net_driver_s *dev,
       nerr("ERROR: Unreachable: %08lx\n", (unsigned long)ipaddr);
       ret = -EHOSTUNREACH;
       goto errout;
+    }
+
+  /* Neighbor support is only built if the Ethernet link layer is supported.
+   * Continue and send the Solicitation only if this device uses the
+   * Ethernet link layer protocol.
+   */
+
+  if (dev->d_lltype != NET_LL_ETHERNET &&
+      dev->d_lltype != NET_LL_IEEE80211)
+    {
+      return OK;
     }
 
   /* Check if the destination address is on the local network. */

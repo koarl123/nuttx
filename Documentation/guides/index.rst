@@ -22,7 +22,7 @@ Guides
   nestedinterrupts.rst
   cortexmhardfaults.rst
   coredump.rst
-  minidumpserver.rst
+  gdbserver.rst
   gdbwithpython.rst
   ofloader.rst
   testingtcpip.rst
@@ -30,3 +30,5 @@ Guides
   stm32nullpointer.rst
   stm32ccm.rst
   stackrecord.rst
+  etcromfs.rst
+  thread_local_storage.rst

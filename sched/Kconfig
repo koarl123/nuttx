@@ -47,7 +47,7 @@ config DISABLE_ENVIRON
 endif # DISABLE_OS_API
 
 config DISABLE_IDLE_LOOP
-	bool
+	bool "Disable idle loop support"
 	default n
 	---help---
 		This option allows nx_start to return instead of
@@ -340,6 +340,18 @@ config PREALLOC_IRQCHAIN
 
 endif # IRQCHAIN
 
+config IRQ_NWORKS
+	int "Max num of active irq wqueue"
+	default 8
+	---help---
+		The max num of active irq wqueue.
+
+config IRQ_WORK_STACKSIZE
+	int "The default stack size for isr wqueue"
+	default DEFAULT_TASK_STACKSIZE
+	---help---
+		The default stack size for isr wqueue.
+
 config IRQCOUNT
 	bool
 	default n
@@ -351,7 +363,6 @@ config SMP
 	depends on ARCH_HAVE_TESTSET
 	depends on ARCH_INTERRUPTSTACK != 0
 	select SPINLOCK
-	select SCHED_RESUMESCHEDULER
 	select IRQCOUNT
 	---help---
 		Enables support for Symmetric Multi-Processing (SMP) on a multi-CPU
@@ -389,12 +400,6 @@ config SMP_DEFAULT_CPUSET
 	---help---
 		Set the Default CPU bits. The way to use the unset CPU is to call the
 		sched_setaffinity function to bind a task to the CPU. bit0 means CPU0.
-
-config SMP_CALL
-	bool "Support SMP function call"
-	default n
-	---help---
-		Enable to support SMP function call.
 
 endif # SMP
 
@@ -445,6 +450,20 @@ config INIT_ENTRYPOINT
 		The name of the entry point for user applications.  For the example
 		applications this is of the form 'app_main' where 'app' is the application
 		name. If not defined, INIT_ENTRYPOINT defaults to "main".
+
+		Note that main must take "argc" and "argv" arguments:
+
+		int main(int argc, FAR char *argv[])
+
+		Otherwise, if using a signature such as "int main(void)" a compilation
+		error will result:
+
+		> $ make
+		> CC:  CustomHello.c <command-line>: error: conflicting types for
+		> 'custom_hello_main'
+		> CustomHello.c:3:5: note: in expansion of macro 'main'
+		>     3 | int main(void)
+		>       |     ^~~~
 
 config INIT_ENTRYNAME
 	string "Application entry name"
@@ -756,13 +775,15 @@ endif # SCHED_CHILD_STATUS
 config SCHED_WAITPID
 	bool "Enable waitpid() API"
 	default n
+	depends on SCHED_HAVE_PARENT || !BUILD_KERNEL
 	---help---
 		Enables the waitpid() interface in a default, non-standard mode
 		(non-standard in the sense that the waited for PID need not be child
 		of the caller).  If SCHED_HAVE_PARENT is also defined, then this
 		setting will modify the behavior or waitpid() (making more spec
 		compliant) and will enable the waitid() and wait() interfaces as
-		well.
+		well. Note that SCHED_HAVE_PARENT must be defined in BUILD_KERNEL if
+		SCHED_WAITPID is needed.
 
 config SCHED_DUMP_LEAK
 	bool "Enable catch task memory leak"
@@ -1415,6 +1436,13 @@ config SEM_PREALLOCHOLDERS
 
 endif # PRIORITY_INHERITANCE
 
+config PRIORITY_PROTECT
+	bool "Enable priority protect"
+	default n
+	---help---
+		When a thread locks a mutex it inherits the priority ceiling of the
+		mutex, which is defined by the application as a mutex attribute.
+
 menu "RTOS hooks"
 
 config BOARD_EARLY_INITIALIZE
@@ -1546,6 +1574,20 @@ config SCHED_STARTHOOK
 endmenu # RTOS hooks
 
 menu "Signal Configuration"
+
+config SIG_PREALLOC_ACTIONS
+	int "Number of pre-allocated sigactions"
+	default 4
+	---help---
+		The number of pre-allocated sigaction structures.
+
+config SIG_ALLOC_ACTIONS
+	int "Num of sigactions to allocate per time"
+	default 1
+	---help---
+		The number of sigactions to allocate per time. Note that
+		if this number is larger than 1, the allocation won't be
+		returned to the heap but kept in a free list for reuse.
 
 config SIG_PREALLOC_IRQ_ACTIONS
 	int "Number of pre-allocated irq actions"
@@ -1938,3 +1980,20 @@ config GROUP_KILL_CHILDREN_TIMEOUT_MS
 		> 0 means wait timeout
 		= 0 means don't do kill signal
 
+config PID_INITIAL_COUNT
+	int "Initial length of pid table"
+	default 8 if DEFAULT_SMALL
+	default 16 if !DEFAULT_SMALL
+	---help---
+		This is the initial length of pid table, which the system
+		can still expand when needed. It is rounded up to power of
+		two by current implementation. If the number of threads in
+		your system is known at design time, setting this to it.
+
+config SCHED_EVENTS
+	bool "Schedule Event objects"
+	default n
+	help
+	  This option enables event objects. Threads may wait on event
+	  objects for specific events, but both threads and ISRs may deliver
+	  events to event objects.

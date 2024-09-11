@@ -35,6 +35,7 @@
 
 #include "shm/shmfs.h"
 #include "inode/inode.h"
+#include "sched/sched.h"
 
 /****************************************************************************
  * Private Function Prototypes
@@ -238,7 +239,12 @@ static int shmfs_truncate(FAR struct file *filep, off_t length)
           filep->f_inode->i_private = shmfs_alloc_object(length);
           if (!filep->f_inode->i_private)
             {
+              filep->f_inode->i_size = 0;
               ret = -EFAULT;
+            }
+          else
+            {
+              filep->f_inode->i_size = length;
             }
         }
       else if (object->length != length)
@@ -290,7 +296,7 @@ static int shmfs_map_object(FAR struct shmfs_object_s *object,
 #ifdef CONFIG_BUILD_KERNEL
   /* Map the physical pages of the shm object with MMU. */
 
-  FAR struct tcb_s *tcb = nxsched_self();
+  FAR struct tcb_s *tcb = this_task();
   FAR struct task_group_s *group = tcb->group;
   FAR uintptr_t *pages = (FAR uintptr_t *)&object->paddr;
   uintptr_t mapaddr;

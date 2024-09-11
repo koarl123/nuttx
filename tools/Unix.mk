@@ -1,6 +1,8 @@
 ############################################################################
 # tools/Unix.mk
 #
+# SPDX-License-Identifier: Apache-2.0
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.  The
@@ -573,6 +575,11 @@ ifeq ($(CONFIG_UBOOT_UIMAGE),y)
 	fi
 	$(Q) echo "uImage" >> nuttx.manifest
 endif
+ifeq ($(CONFIG_RAW_DISASSEMBLY),y)
+	@echo "CP: nuttx.asm"
+	$(Q) $(OBJDUMP) -d $(BIN) > nuttx.asm
+	$(Q) echo nuttx.bin >> nuttx.asm
+endif
 	$(call POSTBUILD, $(TOPDIR))
 
 # flash (or download : DEPRECATED)
@@ -740,7 +747,8 @@ savedefconfig: apps_preconfig
 # that the archiver is 'ar'
 
 export: $(NUTTXLIBS)
-	$(Q) MAKE="${MAKE}" $(MKEXPORT) $(MKEXPORT_ARGS) -l "$(EXPORTLIBS)"
+	$(Q) ZIG="${ZIG}" ZIGFLAGS="${ZIGFLAGS}" MAKE="${MAKE}" \
+		$(MKEXPORT) $(MKEXPORT_ARGS) -l "$(EXPORTLIBS)"
 
 # General housekeeping targets:  dependencies, cleaning, etc.
 #

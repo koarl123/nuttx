@@ -161,8 +161,8 @@ static int composite_classsetup(FAR struct composite_dev_s *priv,
           interface < (priv->device[i].compdesc.devinfo.ifnobase +
                        priv->device[i].compdesc.devinfo.ninterfaces))
         {
-          ret = CLASS_SETUP(priv->device[i].dev, dev, ctrl, dataout, outlen);
-          break;
+          return CLASS_SETUP(priv->device[i].dev, dev, ctrl,
+                             dataout, outlen);
         }
     }
 
@@ -277,14 +277,9 @@ static int composite_msftdescriptor(FAR struct composite_dev_s *priv,
  *
  ****************************************************************************/
 
-#ifdef CONFIG_USBDEV_DUALSPEED
 static int16_t composite_mkcfgdesc(FAR struct usbdevclass_driver_s *driver,
                                    FAR uint8_t *buf,
                                    uint8_t speed, uint8_t type)
-#else
-static int16_t composite_mkcfgdesc(FAR struct usbdevclass_driver_s *driver,
-                                   FAR uint8_t *buf)
-#endif
 {
   FAR struct composite_dev_s *priv =
     ((FAR struct composite_driver_s *)driver)->dev;
@@ -298,9 +293,8 @@ static int16_t composite_mkcfgdesc(FAR struct usbdevclass_driver_s *driver,
   memcpy(buf, priv->descs->cfgdesc, sizeof(struct usb_cfgdesc_s));
 
   cfgdesc = (FAR struct usb_cfgdesc_s *)buf;
-  cfgdesc->totallen[0] = LSBYTE(priv->cfgdescsize);
-  cfgdesc->totallen[1] = MSBYTE(priv->cfgdescsize);
   cfgdesc->ninterfaces = priv->ninterfaces;
+  cfgdesc->type = type;
 
   /* Increment the size and buf to point right behind the information
    * filled in
@@ -315,19 +309,15 @@ static int16_t composite_mkcfgdesc(FAR struct usbdevclass_driver_s *driver,
     {
       FAR struct composite_devobj_s *devobj = &priv->device[i];
 
-#ifdef CONFIG_USBDEV_DUALSPEED
       len = devobj->compdesc.mkconfdesc(buf,
                                         &devobj->compdesc.devinfo,
                                         speed, type);
       total += len;
       buf += len;
-#else
-      len = devobj->compdesc.mkconfdesc(buf,
-                                        &devobj->compdesc.devinfo);
-      total += len;
-      buf += len;
-#endif
     }
+
+  cfgdesc->totallen[0] = LSBYTE(total);
+  cfgdesc->totallen[1] = MSBYTE(total);
 
   return total;
 }
@@ -642,8 +632,24 @@ static int composite_setup(FAR struct usbdevclass_driver_s *driver,
               {
               case USB_DESC_TYPE_DEVICE:
                 {
-                  ret = USB_SIZEOF_DEVDESC;
-                  memcpy(ctrlreq->buf, priv->descs->devdesc, ret);
+                  ret = usbdev_copy_devdesc(ctrlreq->buf,
+                                            priv->descs->devdesc,
+                                            dev->speed);
+
+#ifdef CONFIG_BOARD_USBDEV_PIDVID
+                  {
+                    uint16_t pid = board_usbdev_pid();
+                    uint16_t vid = board_usbdev_vid();
+                    FAR struct usb_devdesc_s *p_desc =
+                               (FAR struct usb_devdesc_s *)ctrlreq->buf;
+
+                    p_desc->vendor[0] = LSBYTE(vid);
+                    p_desc->vendor[1] = MSBYTE(vid);
+
+                    p_desc->product[0] = LSBYTE(pid);
+                    p_desc->product[1] = MSBYTE(pid);
+                  }
+#endif
                 }
                 break;
 
@@ -660,12 +666,8 @@ static int composite_setup(FAR struct usbdevclass_driver_s *driver,
 
               case USB_DESC_TYPE_CONFIG:
                 {
-#ifdef CONFIG_USBDEV_DUALSPEED
                     ret = composite_mkcfgdesc(driver, ctrlreq->buf,
                                               dev->speed, ctrl->value[1]);
-#else
-                    ret = composite_mkcfgdesc(driver, ctrlreq->buf);
-#endif
                 }
                 break;
 
@@ -1002,6 +1004,7 @@ FAR void *composite_initialize(FAR const struct usbdev_devdescs_s *devdescs,
                                FAR struct composite_devdesc_s *pdevices,
                                uint8_t ndevices)
 {
+  FAR const struct usbdev_strdesc_s *strdesc;
   FAR struct composite_alloc_s *alloc;
   FAR struct composite_dev_s *priv;
   FAR struct composite_driver_s *drvr;
@@ -1059,17 +1062,38 @@ FAR void *composite_initialize(FAR const struct usbdev_devdescs_s *devdescs,
       priv->ninterfaces += devobj->compdesc.devinfo.ninterfaces;
     }
 
+  /* Update cfgdescsize based on the longest string descriptor */
+
+#ifdef CONFIG_BOARD_USBDEV_SERIALSTR
+  ret = sizeof(struct usb_strdesc_s) + strlen(board_usbdev_serialstr()) * 2;
+  if (priv->cfgdescsize < ret)
+    {
+      priv->cfgdescsize = ret;
+    }
+#endif
+
+  strdesc = devdescs->strdescs->strdesc;
+  for (i = 0; strdesc[i].string != NULL; i++)
+    {
+      ret = sizeof(struct usb_strdesc_s) + strlen(strdesc[i].string) * 2;
+      if (priv->cfgdescsize < ret)
+        {
+          priv->cfgdescsize = ret;
+        }
+    }
+
   priv->ndevices = ndevices;
 
   /* Initialize the USB class driver structure */
-
-#ifdef CONFIG_USBDEV_DUALSPEED
-  drvr->drvr.speed         = USB_SPEED_HIGH;
+#if defined(CONFIG_USBDEV_SUPERSPEED)
+  drvr->drvr.speed = USB_SPEED_SUPER;
+#elif defined(CONFIG_USBDEV_DUALSPEED)
+  drvr->drvr.speed = USB_SPEED_HIGH;
 #else
-  drvr->drvr.speed         = USB_SPEED_FULL;
+  drvr->drvr.speed = USB_SPEED_FULL;
 #endif
-  drvr->drvr.ops           = &g_driverops;
-  drvr->dev                = priv;
+  drvr->drvr.ops   = &g_driverops;
+  drvr->dev        = priv;
 
   /* Register the USB composite class driver */
 
@@ -1115,24 +1139,15 @@ void composite_uninitialize(FAR void *handle)
 
   DEBUGASSERT(alloc != NULL);
 
-  /* First phase uninitialization each of the member classes */
-
   priv = &alloc->dev;
-
-  for (i = 0; i < priv->ndevices; i++)
-    {
-      priv->device[i].compdesc.uninitialize(priv->device[i].dev);
-    }
 
   /* Then unregister and destroy the composite class */
 
   usbdev_unregister(&alloc->drvr.drvr);
 
-  /* Free any resources used by the composite driver */
-
-  /* None */
-
-  /* Second phase uninitialization:  Clean up all memory resources */
+  /* Uninitialization each of the member classes and clean up
+   * all memory resources
+   */
 
   for (i = 0; i < priv->ndevices; i++)
     {

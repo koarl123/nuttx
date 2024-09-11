@@ -608,7 +608,7 @@ static int modlib_relocatedyn(FAR struct module_s *modp,
       return -ENOMEM;
     }
 
-  memset((void *)&reldata, 0, sizeof(reldata));
+  memset((FAR void *)&reldata, 0, sizeof(reldata));
   relas = (FAR Elf_Rela *)rels;
 
   for (i = 0; dyn[i].d_tag != DT_NULL; i++)
@@ -731,25 +731,13 @@ static int modlib_relocatedyn(FAR struct module_s *modp,
                 }
             }
 
-          /* Calculate the relocation address. */
-
-          if (rel->r_offset < 0)
-            {
-              berr("ERROR: Section %d reloc %d:"
-                   "Relocation address out of range, offset %u\n",
-                   relidx, i, (int)rel->r_offset);
-              ret = -EINVAL;
-              lib_free(sym);
-              lib_free(rels);
-              lib_free(dyn);
-              return ret;
-            }
-
           /* Now perform the architecture-specific relocation */
 
           if ((idx_sym = ELF_R_SYM(rel->r_info)) != 0)
             {
-              if (sym[idx_sym].st_shndx == SHN_UNDEF) /* We have an external reference */
+              /* We have an external reference */
+
+              if (sym[idx_sym].st_shndx == SHN_UNDEF)
                 {
                     FAR void *ep;
 

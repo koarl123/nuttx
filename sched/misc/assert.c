@@ -1,6 +1,8 @@
 /****************************************************************************
  * sched/misc/assert.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -26,6 +28,9 @@
 
 #include <nuttx/arch.h>
 #include <nuttx/board.h>
+#include <nuttx/coredump.h>
+#include <nuttx/fs/fs.h>
+#include <nuttx/init.h>
 #include <nuttx/irq.h>
 #include <nuttx/tls.h>
 #include <nuttx/signal.h>
@@ -46,7 +51,6 @@
 #include "irq/irq.h"
 #include "sched/sched.h"
 #include "group/group.h"
-#include "misc/coredump.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -71,13 +75,27 @@
 #endif
 
 #define DUMP_PTR(p, x) ((uintptr_t)(&(p)[(x)]) < stack_top ? (p)[(x)] : 0)
+#define DUMP_STRIDE    (sizeof(FAR void *) * 8)
+
+#if UINTPTR_MAX <= UINT32_MAX
+#  define DUMP_FORMAT " %08" PRIxPTR ""
+#elif UINTPTR_MAX <= UINT64_MAX
+#  define DUMP_FORMAT " %016" PRIxPTR ""
+#endif
+
+/* Architecture can overwrite the default XCPTCONTEXT alignment */
+
+#ifndef XCPTCONTEXT_ALIGN
+#  define XCPTCONTEXT_ALIGN 16
+#endif
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-static uintptr_t g_last_regs[XCPTCONTEXT_REGS] aligned_data(16);
-static FAR const char *g_policy[4] =
+static uintptr_t
+g_last_regs[XCPTCONTEXT_REGS] aligned_data(XCPTCONTEXT_ALIGN);
+static FAR const char * const g_policy[4] =
 {
   "FIFO", "RR", "SPORADIC"
 };
@@ -89,6 +107,8 @@ static FAR const char * const g_ttypenames[4] =
   "Kthread",
   "Invalid"
 };
+
+static bool g_fatal_assert = false;
 
 /****************************************************************************
  * Private Functions
@@ -128,13 +148,12 @@ static void stack_dump(uintptr_t sp, uintptr_t stack_top)
 {
   uintptr_t stack;
 
-  for (stack = sp; stack <= stack_top; stack += 32)
+  for (stack = sp; stack <= stack_top; stack += DUMP_STRIDE)
     {
-      FAR uint32_t *ptr = (FAR uint32_t *)stack;
+      FAR uintptr_t *ptr = (FAR uintptr_t *)stack;
 
-      _alert("%p: %08" PRIx32 " %08" PRIx32 " %08" PRIx32
-             " %08" PRIx32 " %08" PRIx32 " %08" PRIx32 " %08" PRIx32
-             " %08" PRIx32 "\n",
+      _alert("%p:"DUMP_FORMAT DUMP_FORMAT DUMP_FORMAT DUMP_FORMAT
+             DUMP_FORMAT DUMP_FORMAT DUMP_FORMAT DUMP_FORMAT "\n",
              (FAR void *)stack, DUMP_PTR(ptr, 0), DUMP_PTR(ptr , 1),
              DUMP_PTR(ptr, 2), DUMP_PTR(ptr, 3), DUMP_PTR(ptr, 4),
              DUMP_PTR(ptr, 5), DUMP_PTR(ptr , 6), DUMP_PTR(ptr, 7));
@@ -160,9 +179,9 @@ static void dump_stack(FAR const char *tag, uintptr_t sp,
 
       /* Get more information */
 
-      if (sp - 32 >= base)
+      if (sp - DUMP_STRIDE >= base)
         {
-          sp -= 32;
+          sp -= DUMP_STRIDE;
         }
 
       stack_dump(sp, top);
@@ -194,7 +213,7 @@ static void dump_stack(FAR const char *tag, uintptr_t sp,
 static void dump_stacks(FAR struct tcb_s *rtcb, uintptr_t sp)
 {
 #if CONFIG_ARCH_INTERRUPTSTACK > 0
-  uintptr_t intstack_base = up_get_intstackbase();
+  uintptr_t intstack_base = up_get_intstackbase(this_cpu());
   size_t intstack_size = CONFIG_ARCH_INTERRUPTSTACK;
   uintptr_t intstack_top = intstack_base + intstack_size;
   uintptr_t intstack_sp = 0;
@@ -243,7 +262,7 @@ static void dump_stacks(FAR struct tcb_s *rtcb, uintptr_t sp)
                  intstack_base,
                  intstack_size,
 #ifdef CONFIG_STACK_COLORATION
-                 up_check_intstack()
+                 up_check_intstack(this_cpu())
 #else
                  0
 #endif
@@ -400,22 +419,25 @@ static void dump_backtrace(FAR struct tcb_s *tcb, FAR void *arg)
 #endif
 
 /****************************************************************************
+ * Name: dump_filelist
+ ****************************************************************************/
+
+#ifdef CONFIG_SCHED_DUMP_ON_EXIT
+static void dump_filelist(FAR struct tcb_s *tcb, FAR void *arg)
+{
+  FAR struct filelist *filelist = &tcb->group->tg_filelist;
+  files_dumplist(filelist);
+}
+#endif
+
+/****************************************************************************
  * Name: dump_tasks
  ****************************************************************************/
 
 static void dump_tasks(void)
 {
-#if CONFIG_ARCH_INTERRUPTSTACK > 0 && defined(CONFIG_STACK_COLORATION)
-  size_t stack_used = up_check_intstack();
-  size_t stack_filled = 0;
-
-  if (stack_used > 0)
-    {
-      /* Use fixed-point math with one decimal place */
-
-      stack_filled = 10 * 100 *
-                     stack_used / CONFIG_ARCH_INTERRUPTSTACK;
-    }
+#if CONFIG_ARCH_INTERRUPTSTACK > 0
+  int cpu;
 #endif
 
   /* Dump interesting properties of each task in the crash environment */
@@ -438,37 +460,60 @@ static void dump_tasks(void)
          "   COMMAND\n");
 
 #if CONFIG_ARCH_INTERRUPTSTACK > 0
-  _alert("  ----   ---"
-#  ifdef CONFIG_SMP
-         "  ----"
-#  endif
-         " --- --------"
-         " ------- ---"
-         " ------- ----------"
-         " ----------------"
-         " %p"
-         "   %7u"
+  for (cpu = 0; cpu < CONFIG_SMP_NCPUS; cpu++)
+    {
 #  ifdef CONFIG_STACK_COLORATION
-         "   %7zu   %3zu.%1zu%%%c"
+      size_t stack_used = up_check_intstack(cpu);
+      size_t stack_filled = 0;
+
+      if (stack_used > 0)
+        {
+          /* Use fixed-point math with one decimal place */
+
+          stack_filled = 10 * 100 *
+                         stack_used / CONFIG_ARCH_INTERRUPTSTACK;
+        }
+#  endif
+
+      _alert("  ----   ---"
+#  ifdef CONFIG_SMP
+             "  %4d"
+#  endif
+             " --- --------"
+             " ------- ---"
+             " ------- ----------"
+             " ----------------"
+             " %p"
+             "   %7u"
+#  ifdef CONFIG_STACK_COLORATION
+             "   %7zu   %3zu.%1zu%%%c"
 #  endif
 #  ifndef CONFIG_SCHED_CPULOAD_NONE
-         "     ----"
+             "     ----"
 #  endif
-         "   irq\n"
-         , (FAR void *)up_get_intstackbase()
-         , CONFIG_ARCH_INTERRUPTSTACK
+             "   irq\n"
+#ifdef CONFIG_SMP
+             , cpu
+#endif
+             , (FAR void *)up_get_intstackbase(cpu)
+             , CONFIG_ARCH_INTERRUPTSTACK
 #  ifdef CONFIG_STACK_COLORATION
-         , stack_used
-         , stack_filled / 10, stack_filled % 10,
-         (stack_filled >= 10 * 80 ? '!' : ' ')
+             , stack_used
+             , stack_filled / 10, stack_filled % 10,
+             (stack_filled >= 10 * 80 ? '!' : ' ')
 #  endif
-        );
+            );
+    }
 #endif
 
   nxsched_foreach(dump_task, NULL);
 
 #ifdef CONFIG_SCHED_BACKTRACE
   nxsched_foreach(dump_backtrace, NULL);
+#endif
+
+#ifdef CONFIG_SCHED_DUMP_ON_EXIT
+  nxsched_foreach(dump_filelist, NULL);
 #endif
 }
 
@@ -498,6 +543,25 @@ static void dump_deadlock(void)
 #endif
 
 /****************************************************************************
+ * Name: pause_all_cpu
+ ****************************************************************************/
+
+#ifdef CONFIG_SMP
+static void pause_all_cpu(void)
+{
+  int cpu;
+
+  for (cpu = 0; cpu < CONFIG_SMP_NCPUS; cpu++)
+    {
+      if (cpu != this_cpu())
+        {
+          up_cpu_pause(cpu);
+        }
+    }
+}
+#endif
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -508,6 +572,7 @@ static void dump_deadlock(void)
 void _assert(FAR const char *filename, int linenum,
              FAR const char *msg, FAR void *regs)
 {
+  const bool os_ready = OSINIT_OS_READY();
   FAR struct tcb_s *rtcb = running_task();
 #if CONFIG_TASK_NAME_SIZE > 0
   FAR struct tcb_s *ptcb = NULL;
@@ -524,9 +589,23 @@ void _assert(FAR const char *filename, int linenum,
     }
 #endif
 
-  flags = enter_critical_section();
+  flags = 0; /* suppress GCC warning */
+  if (os_ready)
+    {
+      flags = enter_critical_section();
+    }
 
-  sched_lock();
+  if (g_fatal_assert)
+    {
+      goto reset;
+    }
+
+  if (os_ready && fatal)
+    {
+#ifdef CONFIG_SMP
+      pause_all_cpu();
+#endif
+    }
 
   /* try to save current context if regs is null */
 
@@ -546,7 +625,11 @@ void _assert(FAR const char *filename, int linenum,
     {
       fatal = false;
     }
+  else
 #endif
+    {
+      g_fatal_assert = true;
+    }
 
   notifier_data.rtcb = rtcb;
   notifier_data.regs = regs;
@@ -581,7 +664,7 @@ void _assert(FAR const char *filename, int linenum,
          msg ? msg : "",
          filename ? filename : "", linenum,
 #ifdef CONFIG_SMP
-         up_cpu_index(),
+         this_cpu(),
 #endif
 #if CONFIG_TASK_NAME_SIZE > 0
          rtcb->name,
@@ -645,6 +728,7 @@ void _assert(FAR const char *filename, int linenum,
 
       reboot_notifier_call_chain(SYS_HALT, NULL);
 
+reset:
 #if CONFIG_BOARD_RESET_ON_ASSERT >= 1
       board_reset(CONFIG_BOARD_ASSERT_RESET_VALUE);
 #else
@@ -662,7 +746,8 @@ void _assert(FAR const char *filename, int linenum,
 #endif
     }
 
-  sched_unlock();
-
-  leave_critical_section(flags);
+  if (os_ready)
+    {
+      leave_critical_section(flags);
+    }
 }

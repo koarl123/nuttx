@@ -1,6 +1,8 @@
 /****************************************************************************
  * net/ieee802154/ieee802154_conn.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -119,8 +121,7 @@ FAR struct ieee802154_conn_s *ieee802154_conn_alloc(void)
     {
 #if CONFIG_NET_IEEE802154_MAX_CONNS > 0
       if (dq_count(&g_active_ieee802154_connections) +
-          CONFIG_NET_IEEE802154_ALLOC_CONNS
-          >= CONFIG_NET_IEEE802154_MAX_CONNS)
+         CONFIG_NET_IEEE802154_ALLOC_CONNS > CONFIG_NET_IEEE802154_MAX_CONNS)
         {
           net_unlock();
           return NULL;

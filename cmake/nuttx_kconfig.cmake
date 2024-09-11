@@ -1,6 +1,8 @@
 # ##############################################################################
 # cmake/nuttx_kconfig.cmake
 #
+# SPDX-License-Identifier: Apache-2.0
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more contributor
 # license agreements.  See the NOTICE file distributed with this work for
 # additional information regarding copyright ownership.  The ASF licenses this
@@ -18,14 +20,36 @@
 #
 # ##############################################################################
 
+macro(encode_brackets contents)
+  string(REGEX REPLACE "\\[" "__OPEN_BRACKET__" ${contents} "${${contents}}")
+  string(REGEX REPLACE "\\]" "__CLOSE_BRACKET__" ${contents} "${${contents}}")
+endmacro()
+
+macro(decode_brackets contents)
+  string(REGEX REPLACE "__OPEN_BRACKET__" "[" ${contents} "${${contents}}")
+  string(REGEX REPLACE "__CLOSE_BRACKET__" "]" ${contents} "${${contents}}")
+endmacro()
+
+macro(encode_semicolon contents)
+  string(REGEX REPLACE ";" "__SEMICOLON__" ${contents} "${${contents}}")
+endmacro()
+
+macro(decode_semicolon contents)
+  string(REGEX REPLACE "__SEMICOLON__" ";" ${contents} "${${contents}}")
+endmacro()
+
 function(nuttx_export_kconfig_by_value kconfigfile config)
   file(STRINGS ${kconfigfile} ConfigContents)
+  encode_brackets(ConfigContents)
   foreach(NameAndValue ${ConfigContents})
+    decode_brackets(NameAndValue)
+    encode_semicolon(NameAndValue)
     string(REGEX REPLACE "^[ ]+" "" NameAndValue ${NameAndValue})
     string(REGEX MATCH "^CONFIG[^=]+" Name ${NameAndValue})
     if(Name STREQUAL ${config})
       string(REPLACE "${Name}=" "" Value ${NameAndValue})
       string(REPLACE "\"" "" Value ${Value})
+      decode_semicolon(Value)
       set(${Name}
           ${Value}
           PARENT_SCOPE)
@@ -41,7 +65,10 @@ function(nuttx_export_kconfig kconfigfile)
     set(${key} PARENT_SCOPE)
   endforeach()
   file(STRINGS ${kconfigfile} ConfigContents)
+  encode_brackets(ConfigContents)
   foreach(NameAndValue ${ConfigContents})
+    decode_brackets(NameAndValue)
+    encode_semicolon(NameAndValue)
     # Strip leading spaces
     string(REGEX REPLACE "^[ ]+" "" NameAndValue ${NameAndValue})
 
@@ -54,7 +81,7 @@ function(nuttx_export_kconfig kconfigfile)
 
       # remove extra quotes
       string(REPLACE "\"" "" Value ${Value})
-
+      decode_semicolon(Value)
       # Set the variable
       set(${Name}
           ${Value}
@@ -130,4 +157,11 @@ function(nuttx_generate_kconfig)
   if(MENUDESC)
     file(APPEND ${KCONFIG_OUTPUT_FILE} "endmenu # ${MENUDESC}\n")
   endif()
+endfunction()
+
+function(nuttx_setconfig)
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E env ${KCONFIG_ENV} setconfig ${ARGN}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    OUTPUT_QUIET ERROR_QUIET)
 endfunction()

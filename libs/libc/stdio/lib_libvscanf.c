@@ -174,7 +174,10 @@ doswitch:
     }
 
 doexit:
-  if (v)                        /* Default => accept */
+
+  /* Default => accept */
+
+  if (v)
     {
       for (i = 0; i < 32; i++)  /* Invert all */
         {
@@ -317,33 +320,33 @@ int lib_vscanf(FAR struct lib_instream_s *stream, FAR int *lastc,
                 }
               else if (fmt_char(fmt) == 'z')
                 {
-                  switch (sizeof(size_t))
+                  if (sizeof(size_t) == sizeof(unsigned short))
                     {
-                    /* The only known cases that the default will be hit are
-                     * (1) the eZ80 which has sizeof(size_t) = 3 which is the
-                     * same as the sizeof(int).  And (2) if
-                     * CONFIG_HAVE_LONG_LONG
-                     * is not enabled and sizeof(size_t) is equal to
-                     * sizeof(unsigned long long).  This latter case is an
-                     * error.
-                     */
-
-                    default:
-                      continue;  /* Treat as integer with no size qualifier. */
-
-                    case sizeof(unsigned short):
                       modifier = H_MOD;
-                      break;
-
-                    case sizeof(unsigned long):
+                    }
+                  else if (sizeof(size_t) == sizeof(unsigned long))
+                    {
                       modifier = L_MOD;
-                      break;
-
+                    }
 #if defined(CONFIG_HAVE_LONG_LONG) && ULLONG_MAX != ULONG_MAX
-                    case sizeof(unsigned long long):
+                  else if (sizeof(size_t) == sizeof(unsigned long long))
+                    {
                       modifier = LL_MOD;
-                      break;
+                    }
 #endif
+                  else
+                    {
+                      /* The only known cases that the default will be hit
+                       * are (1) the eZ80 which has sizeof(size_t) = 3 which
+                       * is the same as the sizeof(int).  And (2) if
+                       * CONFIG_HAVE_LONG_LONG
+                       * is not enabled and sizeof(size_t) is equal to
+                       * sizeof(unsigned long long).  This latter case is an
+                       * error.
+                       * Treat as integer with no size qualifier.
+                       */
+
+                      continue;
                     }
                 }
               else if (fmt_char(fmt) == 'j')
@@ -950,7 +953,10 @@ int lib_vscanf(FAR struct lib_instream_s *stream, FAR int *lastc,
 #ifdef CONFIG_HAVE_DOUBLE
               FAR double *pd = NULL;
 #endif
+
+#ifdef CONFIG_HAVE_FLOAT
               FAR float *pf = NULL;
+#endif
 
               linfo("Performing floating point conversion\n");
 
@@ -973,10 +979,12 @@ int lib_vscanf(FAR struct lib_instream_s *stream, FAR int *lastc,
                     }
                   else
 #endif
+#ifdef CONFIG_HAVE_FLOAT
                     {
                       pf = va_arg(ap, FAR float *);
                       *pf = 0.0;
                     }
+#endif
                 }
 
 #ifdef CONFIG_LIBC_FLOATINGPOINT
@@ -994,7 +1002,9 @@ int lib_vscanf(FAR struct lib_instream_s *stream, FAR int *lastc,
 
               if (c > 0)
                 {
+#  if defined(CONFIG_HAVE_DOUBLE) || defined(CONFIG_HAVE_FLOAT)
                   FAR char *endptr;
+#  endif
                   bool expnt;
                   bool dot;
                   bool sign;
@@ -1003,8 +1013,9 @@ int lib_vscanf(FAR struct lib_instream_s *stream, FAR int *lastc,
 #  ifdef CONFIG_HAVE_DOUBLE
                   double dvalue;
 #  endif
+#  ifdef CONFIG_HAVE_FLOAT
                   float fvalue;
-
+#  endif
                   /* Was a fieldwidth specified? */
 
                   if (!width || width > sizeof(tmp) - 1)
@@ -1093,17 +1104,21 @@ int lib_vscanf(FAR struct lib_instream_s *stream, FAR int *lastc,
                     }
                   else
 #  endif
+#  ifdef CONFIG_HAVE_FLOAT
                     {
                       fvalue = strtof(tmp, &endptr);
                     }
+#  endif
 
                   /* Check if the number was successfully converted */
 
+#  if defined(CONFIG_HAVE_DOUBLE) || defined(CONFIG_HAVE_FLOAT)
                   if (tmp == endptr || get_errno() == ERANGE)
                     {
                       *lastc = c;
                       return assigncount;
                     }
+#endif
 
                   set_errno(errsave);
 
@@ -1126,8 +1141,10 @@ int lib_vscanf(FAR struct lib_instream_s *stream, FAR int *lastc,
                         {
                           /* Return the float value */
 
+#  ifdef CONFIG_HAVE_FLOAT
                           linfo("Return %f to %p\n", (double)fvalue, pf);
                           *pf = fvalue;
+#  endif
                         }
 
                       assigncount++;

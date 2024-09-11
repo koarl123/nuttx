@@ -1,6 +1,8 @@
 /****************************************************************************
  * sched/task/task_exit.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -25,6 +27,7 @@
 #include <nuttx/config.h>
 
 #include <sched.h>
+#include <debug.h>
 
 #include "sched/sched.h"
 
@@ -88,6 +91,13 @@ int nxtask_exit(void)
   dtcb = this_task();
 #endif
 
+#if CONFIG_TASK_NAME_SIZE > 0
+  sinfo("%s pid=%d,TCB=%p\n", dtcb->name,
+#else
+  sinfo("pid=%d,TCB=%p\n",
+#endif  
+        dtcb->pid, dtcb);
+
   /* Update scheduler parameters */
 
   nxsched_suspend_scheduler(dtcb);
@@ -130,8 +140,7 @@ int nxtask_exit(void)
 #ifdef CONFIG_SMP
   /* Make sure that the system knows about the locked state */
 
-  spin_setbit(&g_cpu_lockset, this_cpu(), &g_cpu_locksetlock,
-              &g_cpu_schedlock);
+  g_cpu_lockset |= (1 << cpu);
 #endif
 
   rtcb->task_state = TSTATE_TASK_READYTORUN;
@@ -173,8 +182,7 @@ int nxtask_exit(void)
     {
       /* Make sure that the system knows about the unlocked state */
 
-      spin_clrbit(&g_cpu_lockset, this_cpu(), &g_cpu_locksetlock,
-                  &g_cpu_schedlock);
+      g_cpu_lockset &= ~(1 << cpu);
     }
 #endif
 

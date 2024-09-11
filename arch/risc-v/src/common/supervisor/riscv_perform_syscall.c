@@ -28,14 +28,18 @@
 
 #include <nuttx/addrenv.h>
 
+#include "sched/sched.h"
 #include "riscv_internal.h"
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
-void *riscv_perform_syscall(uintptr_t *regs)
+void *riscv_perform_syscall(uintreg_t *regs)
 {
+  struct tcb_s *tcb;
+  int cpu;
+
   /* Set up the interrupt register set needed by swint() */
 
   CURRENT_REGS = regs;
@@ -59,9 +63,17 @@ void *riscv_perform_syscall(uintptr_t *regs)
 
   if (regs != CURRENT_REGS)
     {
+      /* Record the new "running" task.  g_running_tasks[] is only used by
+       * assertion logic for reporting crashes.
+       */
+
+      cpu = this_cpu();
+      tcb = current_task(cpu);
+      g_running_tasks[cpu] = tcb;
+
       /* Restore the cpu lock */
 
-      restore_critical_section();
+      restore_critical_section(tcb, cpu);
 
       /* If a context switch occurred while processing the interrupt then
        * CURRENT_REGS may have change value.  If we return any value
@@ -69,7 +81,7 @@ void *riscv_perform_syscall(uintptr_t *regs)
        * that a context switch occurred during interrupt processing.
        */
 
-      regs = (uintptr_t *)CURRENT_REGS;
+      regs = (uintreg_t *)CURRENT_REGS;
     }
 
   CURRENT_REGS = NULL;

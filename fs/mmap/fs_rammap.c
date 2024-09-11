@@ -36,6 +36,7 @@
 #include <nuttx/sched.h>
 
 #include "fs_rammap.h"
+#include "sched/sched.h"
 
 #ifdef CONFIG_FS_RAMMAP
 
@@ -52,7 +53,7 @@ static int unmap_rammap(FAR struct task_group_s *group,
                         FAR void *start,
                         size_t length)
 {
-  FAR void *newaddr;
+  FAR void *newaddr = NULL;
   off_t offset;
   bool kernel = entry->priv.i;
   int ret = OK;

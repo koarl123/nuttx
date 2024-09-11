@@ -1,6 +1,8 @@
 /****************************************************************************
  * net/inet/ipv4_setsockopt.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -221,7 +223,7 @@ int ipv4_setsockopt(FAR struct socket *psock, int option,
           else
             {
               conn = psock->s_conn;
-              conn->ttl = ttl;
+              conn->s_ttl = ttl;
               ret = OK;
             }
         }
@@ -305,10 +307,6 @@ int ipv4_setsockopt(FAR struct socket *psock, int option,
 
       /* The following IPv4 socket options are defined, but not implemented */
 
-      case IP_MULTICAST_LOOP:         /* Set/read boolean that determines
-                                       * whether sent multicast packets
-                                       * should be looped back to local
-                                       * sockets. */
       case IP_UNBLOCK_SOURCE:         /* Unblock previously blocked multicast
                                        * source */
       case IP_BLOCK_SOURCE:           /* Stop receiving multicast data from
@@ -327,8 +325,12 @@ int ipv4_setsockopt(FAR struct socket *psock, int option,
         nwarn("WARNING: Unimplemented IPv4 option: %d\n", option);
         ret = -ENOSYS;
         break;
-#endif /* CONFIG_NET_IGMP */
 
+      case IP_MULTICAST_LOOP:         /* Set/read boolean that determines
+                                       * whether sent multicast packets
+                                       * should be looped back to local
+                                       * sockets. */
+#endif /* CONFIG_NET_IGMP */
       case IP_PKTINFO:
         {
           FAR struct socket_conn_s *conn;

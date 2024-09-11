@@ -44,15 +44,43 @@
 
 #include <arch/chip/irq.h>
 
-#ifndef __ASSEMBLY__
-#  include <stdint.h>
-#endif
-
 /****************************************************************************
  * Pre-processor Prototypes
  ****************************************************************************/
 
-#define up_getsp()              (uintptr_t)__builtin_frame_address(0)
+#define up_getsp()          (uintptr_t)__builtin_frame_address(0)
+
+/* MPIDR_EL1, Multiprocessor Affinity Register */
+
+#define MPIDR_AFFLVL_MASK   (0xff)
+
+#define MPIDR_AFF0_SHIFT    (0)
+#define MPIDR_AFF1_SHIFT    (8)
+#define MPIDR_AFF2_SHIFT    (16)
+#define MPIDR_AFF3_SHIFT    (32)
+
+/* mpidr_el1 register, the register is define:
+ *   - bit 0~7:   Aff0
+ *   - bit 8~15:  Aff1
+ *   - bit 16~23: Aff2
+ *   - bit 24:    MT, multithreading
+ *   - bit 25~29: RES0
+ *   - bit 30:    U, multiprocessor/Uniprocessor
+ *   - bit 31:    RES1
+ *   - bit 32~39: Aff3
+ *   - bit 40~63: RES0
+ *   Different ARM64 Core will use different Affn define, the mpidr_el1
+ *  value is not CPU number, So we need to change CPU number to mpid
+ *  and vice versa
+ */
+
+#define GET_MPIDR()                              \
+  ({                                             \
+    uint64_t __val;                              \
+    __asm__ volatile ("mrs %0, mpidr_el1"        \
+                    : "=r" (__val) :: "memory"); \
+    __val;                                       \
+  })
 
 /****************************************************************************
  * Exception stack frame format:
@@ -192,6 +220,14 @@
 #define XCPTCONTEXT_REGS    (XCPTCONTEXT_GP_REGS + XCPTCONTEXT_FPU_REGS)
 #define XCPTCONTEXT_SIZE    (8 * XCPTCONTEXT_REGS)
 
+#ifdef CONFIG_ARM64_DECODEFIQ
+#  define IRQ_DAIF_MASK (3)
+#else
+#  define IRQ_DAIF_MASK (2)
+#endif
+
+#define IRQ_SPSR_MASK (IRQ_DAIF_MASK << 6)
+
 #ifndef __ASSEMBLY__
 
 #ifdef __cplusplus
@@ -207,7 +243,7 @@ extern "C"
  ****************************************************************************/
 
 /* g_current_regs[] holds a references to the current interrupt level
- * register storage structure.  If is non-NULL only during interrupt
+ * register storage structure.  It is non-NULL only during interrupt
  * processing.  Access to g_current_regs[] must be through the macro
  * CURRENT_REGS for portability.
  */
@@ -218,6 +254,12 @@ extern "C"
 
 EXTERN volatile uint64_t *g_current_regs[CONFIG_SMP_NCPUS];
 #define CURRENT_REGS (g_current_regs[up_cpu_index()])
+
+/****************************************************************************
+ * Public Types
+ ****************************************************************************/
+
+#ifndef __ASSEMBLY__
 
 struct xcptcontext
 {
@@ -238,6 +280,9 @@ struct xcptcontext
   /* task stack reg context */
 
   uint64_t *regs;
+#ifndef CONFIG_BUILD_FLAT
+  uint64_t *initregs;
+#endif
 
   /* task context, for signal process */
 
@@ -254,7 +299,7 @@ struct xcptcontext
    * address register (FAR) at the time of data abort exception.
    */
 
-#ifdef CONFIG_PAGING
+#ifdef CONFIG_LEGACY_PAGING
   uintptr_t far;
 #endif
 
@@ -280,10 +325,11 @@ struct xcptcontext
 
   uintptr_t *ustkptr;  /* Saved user stack pointer */
   uintptr_t *kstack;   /* Allocate base of the (aligned) kernel stack */
-  uintptr_t *kstkptr;  /* Saved kernel stack pointer */
 #  endif
 #endif
 };
+
+#endif /* __ASSEMBLY__ */
 
 /* Name: up_irq_save, up_irq_restore, and friends.
  *
@@ -314,13 +360,9 @@ static inline irqstate_t up_irq_save(void)
   __asm__ __volatile__
     (
       "mrs %0, daif\n"
-#ifdef CONFIG_ARM64_DECODEFIQ
-      "msr daifset, #3\n"
-#else
-      "msr daifset, #2\n"
-#endif
+      "msr daifset, %1\n"
       : "=r" (flags)
-      :
+      : "i" (IRQ_DAIF_MASK)
       : "memory"
     );
 
@@ -336,13 +378,9 @@ static inline irqstate_t up_irq_enable(void)
   __asm__ __volatile__
     (
       "mrs %0, daif\n"
-#ifdef CONFIG_ARM64_DECODEFIQ
-      "msr daifclr, #3\n"
-#else
-      "msr daifclr, #2\n"
-#endif
+      "msr daifclr, %1\n"
       : "=r" (flags)
-      :
+      : "i" (IRQ_DAIF_MASK)
       : "memory"
     );
   return flags;
@@ -376,7 +414,7 @@ static inline void up_irq_restore(irqstate_t flags)
  ****************************************************************************/
 
 #ifdef CONFIG_SMP
-int up_cpu_index(void);
+#  define up_cpu_index() ((int)MPID_TO_CORE(GET_MPIDR()))
 #else
 #  define up_cpu_index() (0)
 #endif

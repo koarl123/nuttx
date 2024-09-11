@@ -33,8 +33,9 @@
 
 #include <nuttx/fs/fs.h>
 
-#include "inode/inode.h"
 #include "driver/driver.h"
+#include "inode/inode.h"
+#include "notify/notify.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -57,8 +58,8 @@
 
 /* These file systems require MTD drivers */
 
-#if (defined(CONFIG_FS_SPIFFS) || defined(CONFIG_FS_LITTLEFS)) && \
-    defined(CONFIG_MTD)
+#if (defined(CONFIG_FS_SPIFFS) || defined(CONFIG_FS_LITTLEFS) || \
+    defined(CONFIG_FS_MNEMOFS)) && defined(CONFIG_MTD)
 #  define MDFS_SUPPORT 1
 #endif
 
@@ -68,7 +69,8 @@
     defined(CONFIG_FS_PROCFS) || defined(CONFIG_NFS) || \
     defined(CONFIG_FS_TMPFS) || defined(CONFIG_FS_USERFS) || \
     defined(CONFIG_FS_CROMFS) || defined(CONFIG_FS_UNIONFS) || \
-    defined(CONFIG_FS_HOSTFS)
+    defined(CONFIG_FS_HOSTFS) || defined(CONFIG_FS_RPMSGFS) || \
+    defined(CONFIG_FS_V9FS)
 #  define NODFS_SUPPORT
 #endif
 
@@ -132,6 +134,9 @@ extern const struct mountpt_operations g_spiffs_operations;
 #ifdef CONFIG_FS_LITTLEFS
 extern const struct mountpt_operations g_littlefs_operations;
 #endif
+#ifdef CONFIG_FS_MNEMOFS
+extern const struct mountpt_operations g_mnemofs_operations;
+#endif
 
 static const struct fsmap_t g_mdfsmap[] =
 {
@@ -143,6 +148,9 @@ static const struct fsmap_t g_mdfsmap[] =
 #endif
 #ifdef CONFIG_FS_LITTLEFS
     { "littlefs", &g_littlefs_operations },
+#endif
+#ifdef CONFIG_FS_MNEMOFS
+    { "mnemofs", &g_mnemofs_operations },
 #endif
     { NULL,   NULL },
 };
@@ -184,6 +192,9 @@ extern const struct mountpt_operations g_rpmsgfs_operations;
 #ifdef CONFIG_FS_ZIPFS
 extern const struct mountpt_operations g_zipfs_operations;
 #endif
+#ifdef CONFIG_FS_V9FS
+extern const struct mountpt_operations g_v9fs_operations;
+#endif
 
 static const struct fsmap_t g_nonbdfsmap[] =
 {
@@ -219,6 +230,9 @@ static const struct fsmap_t g_nonbdfsmap[] =
 #endif
 #ifdef CONFIG_FS_ZIPFS
     { "zipfs", &g_zipfs_operations},
+#endif
+#ifdef CONFIG_FS_V9FS
+    { "v9fs", &g_v9fs_operations},
 #endif
     { NULL, NULL },
 };
@@ -279,12 +293,12 @@ int nx_mount(FAR const char *source, FAR const char *target,
 {
 #if defined(BDFS_SUPPORT) || defined(MDFS_SUPPORT) || defined(NODFS_SUPPORT)
   FAR struct inode *drvr_inode = NULL;
-  FAR struct inode *mountpt_inode;
+  FAR struct inode *mountpt_inode = NULL;
   FAR const struct mountpt_operations *mops = NULL;
 #ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
   struct inode_search_s desc;
 #endif
-  void *fshandle;
+  FAR void *fshandle = NULL;
   int ret;
 
   /* Verify required pointer arguments */
@@ -293,7 +307,7 @@ int nx_mount(FAR const char *source, FAR const char *target,
 
   /* Find the specified filesystem. Try the block driver filesystems first */
 
-  if (source != NULL &&
+  if (source != NULL && source[0] != '\0' &&
       find_blockdriver(source, mountflags, &drvr_inode) >= 0)
     {
       /* Find the block based file system */
@@ -310,7 +324,7 @@ int nx_mount(FAR const char *source, FAR const char *target,
           goto errout_with_inode;
         }
     }
-  else if (source != NULL &&
+  else if (source != NULL && source[0] != '\0' &&
            (ret = find_mtddriver(source, &drvr_inode)) >= 0)
     {
       /* Find the MTD based file system */
@@ -331,6 +345,7 @@ int nx_mount(FAR const char *source, FAR const char *target,
 #ifdef NODFS_SUPPORT
   if ((mops = mount_findfs(g_nonbdfsmap, filesystemtype)) != NULL)
     {
+      finfo("found %s\n", filesystemtype);
     }
   else
 #endif /* NODFS_SUPPORT */
@@ -427,6 +442,8 @@ int nx_mount(FAR const char *source, FAR const char *target,
     }
 #endif
 
+  inode_unlock();
+
   /* On failure, the bind method returns -errorcode */
 
 #if defined(BDFS_SUPPORT) || defined(MDFS_SUPPORT)
@@ -434,6 +451,7 @@ int nx_mount(FAR const char *source, FAR const char *target,
 #else
   ret = mops->bind(NULL, data, &fshandle);
 #endif
+  DEBUGVERIFY(inode_lock() >= 0);
   if (ret < 0)
     {
       /* The inode is unhappy with the driver for some reason.  Back out
@@ -481,14 +499,15 @@ int nx_mount(FAR const char *source, FAR const char *target,
 #ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
   RELEASE_SEARCH(&desc);
 #endif
+#ifdef CONFIG_FS_NOTIFY
+  notify_create(target);
+#endif
   return OK;
 
   /* A lot of goto's!  But they make the error handling much simpler */
 
 errout_with_mountpt:
-  inode_release(mountpt_inode);
   inode_remove(target);
-
 errout_with_lock:
   inode_unlock();
 #ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS

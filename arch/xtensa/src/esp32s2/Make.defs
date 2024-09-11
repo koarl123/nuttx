@@ -74,18 +74,6 @@ CHIP_CSRCS += esp32s2_spi_slave.c
 endif
 endif
 
-#ifeq ($(CONFIG_ESP32S2_SPIFLASH),y)
-#CHIP_CSRCS += esp32s2_spicache.c
-#CHIP_CSRCS += esp32s2_spiflash.c
-#endif
-
-ifeq ($(CONFIG_ESP32S2_SPIFLASH),y)
-CHIP_CSRCS += esp32s2_spiflash.c
-ifeq ($(CONFIG_ESP32S2_MTD),y)
-CHIP_CSRCS += esp32s2_spiflash_mtd.c
-endif
-endif
-
 ifeq ($(CONFIG_ESP32S2_PARTITION_TABLE),y)
 CHIP_CSRCS += esp32_partition.c
 endif
@@ -143,6 +131,10 @@ ifeq ($(CONFIG_RTC_DRIVER),y)
 CHIP_CSRCS += esp32s2_rtc_lowerhalf.c
 endif
 
+ifeq ($(CONFIG_ESPRESSIF_WIFI),y)
+CHIP_CSRCS += esp32s2_wifi_adapter.c
+endif
+
 #############################################################################
 # Espressif HAL for 3rd Party Platforms
 #############################################################################
@@ -151,7 +143,7 @@ endif
 
 ESP_HAL_3RDPARTY_REPO   = esp-hal-3rdparty
 ifndef ESP_HAL_3RDPARTY_VERSION
-	ESP_HAL_3RDPARTY_VERSION = 22804823777dbbb7f43925b7729b3a32331aa7cd
+	ESP_HAL_3RDPARTY_VERSION = 20690e67695f0a8170a19ec99e2e9a13b620e94d
 endif
 
 ifndef ESP_HAL_3RDPARTY_URL
@@ -168,6 +160,10 @@ chip/$(ESP_HAL_3RDPARTY_REPO):
 
 CFLAGS += -Wno-undef -Wno-unused-variable
 
+# Enable strict volatile bitfield access
+
+CFLAGS += -fstrict-volatile-bitfields
+
 CHIP_SERIES = $(patsubst "%",%,$(CONFIG_ESPRESSIF_CHIP_SERIES))
 
 include chip/hal.mk
@@ -177,6 +173,13 @@ include common/espressif/Make.defs
 include chip/Bootloader.mk
 
 context:: chip/$(ESP_HAL_3RDPARTY_REPO)
+ifeq ($(CONFIG_ESPRESSIF_WIRELESS),y)
+	$(Q) echo "Espressif HAL for 3rd Party Platforms: initializing submodules..."
+	$(Q) git -C chip/$(ESP_HAL_3RDPARTY_REPO) submodule --quiet update --init $(GIT_DEPTH_PARAMETER) components/mbedtls/mbedtls components/esp_phy/lib components/esp_wifi/lib
+	$(Q) git -C chip/$(ESP_HAL_3RDPARTY_REPO)/components/mbedtls/mbedtls reset --quiet --hard
+	$(Q) echo "Applying patches..."
+	$(Q) cd chip/$(ESP_HAL_3RDPARTY_REPO)/components/mbedtls/mbedtls && git apply ../../../nuttx/patches/components/mbedtls/mbedtls/*.patch
+endif
 
 distclean::
 	$(call DELDIR,chip/$(ESP_HAL_3RDPARTY_REPO))

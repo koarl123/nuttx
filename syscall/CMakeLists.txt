@@ -1,6 +1,8 @@
 # ##############################################################################
 # syscall/CMakeLists.txt
 #
+# SPDX-License-Identifier: Apache-2.0
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more contributor
 # license agreements.  See the NOTICE file distributed with this work for
 # additional information regarding copyright ownership.  The ASF licenses this
@@ -22,6 +24,14 @@ file(STRINGS syscall.csv SYSCALLS)
 list(TRANSFORM SYSCALLS REPLACE "^\"([^,]+)\",.+" "\\1")
 list(TRANSFORM SYSCALLS APPEND ".c")
 
+# generate the host tool
+
+add_custom_target(
+  mksyscall
+  COMMAND cmake -B ${CMAKE_BINARY_DIR}/bin -S ${CMAKE_SOURCE_DIR}/tools && cmake
+          --build ${CMAKE_BINARY_DIR}/bin --target mksyscall
+  SOURCES ${CMAKE_SOURCE_DIR}/tools/mksyscall.c)
+
 if(CONFIG_LIB_SYSCALL)
   add_subdirectory(proxies)
   add_subdirectory(stubs)
@@ -34,11 +44,9 @@ endif()
 if(CONFIG_SCHED_INSTRUMENTATION_SYSCALL)
   if(CONFIG_LIB_SYSCALL)
     target_sources(proxies PRIVATE syscall_names.c)
+    target_sources(stubs PRIVATE syscall_names.c)
   else()
-    target_sources(proxies PRIVATE syscall_names.c)
+    add_subdirectory(wraps)
+    target_sources(wraps PRIVATE syscall_names.c)
   endif()
-endif()
-
-if(CONFIG_SCHED_INSTRUMENTATION_SYSCALL)
-  add_subdirectory(wraps)
 endif()

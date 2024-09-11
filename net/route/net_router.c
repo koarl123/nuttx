@@ -1,6 +1,8 @@
 /****************************************************************************
  * net/route/net_router.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -43,7 +45,7 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#ifdef CONFIG_ROUTE_IPv6_CACHEROUTE
+#ifdef CONFIG_ROUTE_IPv4_CACHEROUTE
 #  define IPv4_ROUTER entry.router
 #else
 #  define IPv4_ROUTER router

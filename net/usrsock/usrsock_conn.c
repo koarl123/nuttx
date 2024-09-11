@@ -1,6 +1,8 @@
 /****************************************************************************
  * net/usrsock/usrsock_conn.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -90,7 +92,7 @@ FAR struct usrsock_conn_s *usrsock_alloc(void)
     {
 #if CONFIG_NET_USRSOCK_MAX_CONNS > 0
       if (dq_count(&g_active_usrsock_connections) +
-          CONFIG_NET_USRSOCK_ALLOC_CONNS >= CONFIG_NET_USRSOCK_MAX_CONNS)
+          CONFIG_NET_USRSOCK_ALLOC_CONNS > CONFIG_NET_USRSOCK_MAX_CONNS)
         {
           nxmutex_unlock(&g_free_lock);
           return NULL;
