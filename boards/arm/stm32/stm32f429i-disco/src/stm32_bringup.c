@@ -423,6 +423,7 @@ int stm32_bringup(void)
   {
     syslog(LOG_ERR, "ERROR: stm32_gpio_initialize() failed: %d\n",ret);
   }
+#endif
 
 #ifdef CONFIG_STM32_CAN_CHARDRIVER
   /* Initialize CAN and register the CAN driver. */
