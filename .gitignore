@@ -76,3 +76,4 @@ kwarning
 SAVEMake.defs
 SAVEconfig
 .aider*
+/build_*
