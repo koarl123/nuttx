@@ -1,6 +1,8 @@
 /****************************************************************************
  * include/nuttx/irq.h
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -78,9 +80,7 @@
   do \
     { \
       g_cpu_irqset = 0; \
-      SP_DMB(); \
-      g_cpu_irqlock = SP_UNLOCKED; \
-      SP_DSB(); \
+      spin_unlock_wo_note(&g_cpu_irqlock); \
     } \
   while (0)
 #endif
@@ -258,10 +258,8 @@ int irqchain_detach(int irq, xcpt_t isr, FAR void *arg);
  ****************************************************************************/
 
 #ifdef CONFIG_IRQCOUNT
-irqstate_t enter_critical_section_nonirq(void) noinstrument_function;
 irqstate_t enter_critical_section(void) noinstrument_function;
 #else
-#  define enter_critical_section_nonirq() up_irq_save()
 #  define enter_critical_section() up_irq_save()
 #endif
 
@@ -290,10 +288,8 @@ irqstate_t enter_critical_section(void) noinstrument_function;
  ****************************************************************************/
 
 #ifdef CONFIG_IRQCOUNT
-void leave_critical_section_nonirq(irqstate_t flags) noinstrument_function;
 void leave_critical_section(irqstate_t flags) noinstrument_function;
 #else
-#  define leave_critical_section_nonirq(f) up_irq_restore(f)
 #  define leave_critical_section(f) up_irq_restore(f)
 #endif
 

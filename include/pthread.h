@@ -1,6 +1,8 @@
 /****************************************************************************
  * include/pthread.h
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -47,7 +49,7 @@
  * SP_LOCKED and SP_UNLOCKED must constants of type spinlock_t.
  */
 
-#  include <arch/spinlock.h>
+#  include <nuttx/spinlock_type.h>
 #endif
 
 /****************************************************************************
@@ -267,6 +269,7 @@ struct pthread_cond_s
 {
   sem_t sem;
   clockid_t clockid;
+  uint16_t wait_count;
 };
 
 #ifndef __PTHREAD_COND_T_DEFINED
@@ -365,6 +368,8 @@ struct pthread_barrier_s
 {
   sem_t        sem;
   unsigned int count;
+  unsigned int wait_count;
+  mutex_t      mutex;
 };
 
 #ifndef __PTHREAD_BARRIER_T_DEFINED
@@ -429,11 +434,9 @@ typedef FAR struct pthread_spinlock_s pthread_spinlock_t;
 #  endif
 #endif /* CONFIG_PTHREAD_SPINLOCKS */
 
-#if defined(CONFIG_PTHREAD_CLEANUP_STACKSIZE) && CONFIG_PTHREAD_CLEANUP_STACKSIZE > 0
 /* This type describes the pthread cleanup callback (non-standard) */
 
 typedef CODE void (*pthread_cleanup_t)(FAR void *arg);
-#endif
 
 /* Forward references */
 
@@ -545,9 +548,12 @@ void pthread_testcancel(void);
  * is canceled.
  */
 
-#if defined(CONFIG_PTHREAD_CLEANUP_STACKSIZE) && CONFIG_PTHREAD_CLEANUP_STACKSIZE > 0
+#if CONFIG_TLS_NCLEANUP > 0
 void pthread_cleanup_pop(int execute);
 void pthread_cleanup_push(pthread_cleanup_t routine, FAR void *arg);
+#else
+#  define pthread_cleanup_pop(execute) ((void)(execute))
+#  define pthread_cleanup_push(routine,arg) ((void)(routine), (void)(arg))
 #endif
 
 /* A thread can await termination of another thread and retrieve the return
@@ -586,6 +592,9 @@ int pthread_setaffinity_np(pthread_t thread, size_t cpusetsize,
                            FAR const cpu_set_t *cpuset);
 int pthread_getaffinity_np(pthread_t thread, size_t cpusetsize,
                            FAR cpu_set_t *cpuset);
+#else
+#define pthread_setaffinity_np(...) (-ENOSYS)
+#define pthread_getaffinity_np(...) (-ENOSYS)
 #endif
 
 /* Thread-specific Data Interfaces */

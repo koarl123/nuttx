@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/renesas/include/sh1/irq.h
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -449,12 +451,6 @@
 #ifndef __ASSEMBLY__
 struct xcptcontext
 {
-  /* The following function pointer is non-zero if there are pending signals
-   * to be processed.
-   */
-
-  void *sigdeliver; /* Actual type is sig_deliver_t */
-
   /* These are saved copies of LR and SR used during signal processing.
    *
    * REVISIT:  Because there is only one copy of these save areas,
@@ -567,6 +563,13 @@ static inline void up_irq_restore(irqstate_t flags)
 /****************************************************************************
  * Public Functions Prototypes
  ****************************************************************************/
+
+/****************************************************************************
+ * Name: up_getusrpc
+ ****************************************************************************/
+
+#define up_getusrpc(regs) \
+    (((uint32_t *)((regs) ? (regs) : up_current_regs()))[REG_PC])
 
 #undef EXTERN
 #ifdef __cplusplus

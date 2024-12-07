@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/z80/src/z180/z180_registerdump.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -52,7 +54,7 @@ uintptr_t up_getusrsp(FAR void *regs)
 
 void up_dump_register(FAR void *dumpregs)
 {
-  FAR volatile chipreg_t *regs = dumpregs ? dumpregs : g_current_regs;
+  FAR volatile chipreg_t *regs = dumpregs ? dumpregs : up_current_regs();
 
   _alert("AF: %04x  I: %04x\n",
          regs[XCPT_AF], regs[XCPT_I]);

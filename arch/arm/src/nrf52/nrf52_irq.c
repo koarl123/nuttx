@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/src/nrf52/nrf52_irq.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -143,9 +145,11 @@ static int nrf52_nmi(int irq, void *context, void *arg)
 
 static int nrf52_pendsv(int irq, void *context, void *arg)
 {
+#ifndef CONFIG_ARCH_HIPRI_INTERRUPT
   up_irq_save();
   _err("PANIC!!! PendSV received\n");
   PANIC();
+#endif
   return 0;
 }
 

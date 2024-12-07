@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/ceva/include/xc5/irq.h
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -127,12 +129,6 @@ struct xcpt_syscall_s
 struct xcptcontext
 {
 #ifndef CONFIG_DISABLE_SIGNALS
-  /* The following function pointer is non-zero if there
-   * are pending signals to be processed.
-   */
-
-  void *sigdeliver; /* Actual type is sig_deliver_t */
-
   /* These are saved copies of the context used during
    * signal processing.
    */

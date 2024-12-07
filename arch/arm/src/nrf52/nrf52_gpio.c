@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/src/nrf52/nrf52_gpio.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -409,7 +411,14 @@ bool nrf52_gpio_read(nrf52_pinset_t pinset)
 
   /* Get register address */
 
-  offset = nrf52_gpio_regget(port, NRF52_GPIO_IN_OFFSET);
+  if ((pinset & GPIO_FUNC_MASK) == GPIO_OUTPUT)
+    {
+      offset = nrf52_gpio_regget(port, NRF52_GPIO_OUTSET_OFFSET);
+    }
+  else
+    {
+      offset = nrf52_gpio_regget(port, NRF52_GPIO_IN_OFFSET);
+    }
 
   /* Get register value */
 

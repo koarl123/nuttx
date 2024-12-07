@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/x86_64/src/intel64/intel64_handlers.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -62,8 +64,10 @@
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
 static uint64_t *common_handler(int irq, uint64_t *regs)
 {
+  struct tcb_s **running_task = &g_running_tasks[this_cpu()];
   struct tcb_s *tcb;
-  int cpu;
+
+  (*running_task)->xcp.regs = regs;
 
   /* Current regs non-zero indicates that we are processing an interrupt;
    * g_current_regs is also used to manage interrupt level context switches.
@@ -80,13 +84,14 @@ static uint64_t *common_handler(int irq, uint64_t *regs)
 
   /* Check for a context switch.  If a context switch occurred, then
    * g_current_regs will have a different value than it did on entry.  If an
-   * interrupt level context switch has occurred, then restore the floating
-   * point state and the establish the correct address environment before
-   * returning from the interrupt.
+   * interrupt level context switch has occurred, then the establish the
+   * correct address environment before returning from the interrupt.
    */
 
   if (regs != up_current_regs())
     {
+      tcb = this_task();
+
 #ifdef CONFIG_ARCH_ADDRENV
       /* Make sure that the address environment for the previously
        * running task is closed down gracefully (data caches dump,
@@ -94,21 +99,24 @@ static uint64_t *common_handler(int irq, uint64_t *regs)
        * thread at the head of the ready-to-run list.
        */
 
-      addrenv_switch(NULL);
+      addrenv_switch(tcb);
 #endif
+
+      /* Update scheduler parameters */
+
+      nxsched_suspend_scheduler(*running_task);
+      nxsched_resume_scheduler(tcb);
 
       /* Record the new "running" task when context switch occurred.
        * g_running_tasks[] is only used by assertion logic for reporting
        * crashes.
        */
 
-      cpu = this_cpu();
-      tcb = current_task(cpu);
-      g_running_tasks[cpu] = tcb;
+      *running_task = tcb;
 
       /* Restore the cpu lock */
 
-      restore_critical_section(tcb, cpu);
+      restore_critical_section(tcb, this_cpu());
     }
 
   /* If a context switch occurred while processing the interrupt then
@@ -142,6 +150,13 @@ static uint64_t *common_handler(int irq, uint64_t *regs)
 
 uint64_t *isr_handler(uint64_t *regs, uint64_t irq)
 {
+  struct tcb_s **running_task = &g_running_tasks[this_cpu()];
+
+  if (*running_task != NULL)
+    {
+      (*running_task)->xcp.regs = regs;
+    }
+
   board_autoled_on(LED_INIRQ);
 
 #ifdef CONFIG_SUPPRESS_INTERRUPTS
@@ -175,7 +190,7 @@ uint64_t *isr_handler(uint64_t *regs, uint64_t irq)
                "with error code %" PRId64 ":\n",
                irq, regs[REG_ERRCODE]);
 
-        up_dump_register(regs);
+        PANIC_WITH_REGS("panic", regs);
 
         up_trash_cpu();
         break;
@@ -232,4 +247,28 @@ uint64_t *irq_handler(uint64_t *regs, uint64_t irq_no)
   board_autoled_off(LED_INIRQ);
   return ret;
 #endif
+}
+
+/****************************************************************************
+ * Name: irq_xcp_regs
+ *
+ * Description:
+ *   Return current task XCP registers area.
+ *
+ * ASSUMPTION:
+ *   Interrupts are disabled.
+ *
+ *   This function should be called only form intel64_vector.S file !
+ *   Any other use must be carefully considered.
+ *
+ ****************************************************************************/
+
+uint64_t *irq_xcp_regs(void)
+{
+  /* This must be the simplest as possible, so we not use too much registers.
+   * Now this function corrupts only RAX and RDX registers regardless of
+   * the compiler optimization.
+   */
+
+  return (current_task(this_cpu()))->xcp.regs;
 }

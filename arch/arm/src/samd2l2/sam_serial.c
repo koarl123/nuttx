@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/src/samd2l2/sam_serial.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -1037,7 +1039,7 @@ void arm_serialinit(void)
  *
  ****************************************************************************/
 
-int up_putc(int ch)
+void up_putc(int ch)
 {
 #ifdef HAVE_SERIAL_CONSOLE
   irqstate_t flags;
@@ -1047,20 +1049,9 @@ int up_putc(int ch)
    */
 
   flags = spin_lock_irqsave(NULL);
-
-  /* Check for LF */
-
-  if (ch == '\n')
-    {
-      /* Add CR */
-
-      sam_lowputc('\r');
-    }
-
   sam_lowputc(ch);
   spin_unlock_irqrestore(NULL, flags);
 #endif
-  return ch;
 }
 
 #else /* USE_SERIALDRIVER */
@@ -1073,21 +1064,11 @@ int up_putc(int ch)
  *
  ****************************************************************************/
 
-int up_putc(int ch)
+void up_putc(int ch)
 {
 #ifdef HAVE_SERIAL_CONSOLE
-  /* Check for LF */
-
-  if (ch == '\n')
-    {
-      /* Add CR */
-
-      sam_lowputc('\r');
-    }
-
   sam_lowputc(ch);
 #endif
-  return ch;
 }
 
 #endif /* USE_SERIALDRIVER */

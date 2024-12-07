@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/src/kinetis/kinetis_lpserial.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -1949,27 +1951,16 @@ void kinetis_lpserial_dma_poll(void)
  ****************************************************************************/
 
 #ifdef HAVE_LPUART_PUTC
-int up_putc(int ch)
+void up_putc(int ch)
 {
 #ifdef HAVE_LPUART_CONSOLE
   struct kinetis_dev_s *priv = (struct kinetis_dev_s *)CONSOLE_DEV.priv;
   uint32_t ie;
 
   kinetis_disableuartint(priv, &ie);
-
-  /* Check for LF */
-
-  if (ch == '\n')
-    {
-      /* Add CR */
-
-      arm_lowputc('\r');
-    }
-
   arm_lowputc(ch);
   kinetis_restoreuartint(priv, ie);
 #endif
-  return ch;
 }
 #endif
 
@@ -1984,21 +1975,11 @@ int up_putc(int ch)
  ****************************************************************************/
 
 #ifdef HAVE_LPUART_PUTC
-int up_putc(int ch)
+void up_putc(int ch)
 {
 #ifdef HAVE_LPUART_CONSOLE
-  /* Check for LF */
-
-  if (ch == '\n')
-    {
-      /* Add CR */
-
-      arm_lowputc('\r');
-    }
-
   arm_lowputc(ch);
 #endif
-  return ch;
 }
 #endif
 

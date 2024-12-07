@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/x86_64/include/irq.h
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -46,6 +48,14 @@
 #endif
 
 /****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#define X86_64_CPUPRIV_USTACK_OFFSET      (16)
+#define X86_64_CPUPRIV_UVBASE_OFFSET      (24)
+#define X86_64_CPUPRIV_KTOPSTK_OFFSET     (32)
+
+/****************************************************************************
  * Public Data
  ****************************************************************************/
 
@@ -65,6 +75,29 @@ struct intel64_cpu_s
  */
 
   uint64_t *current_regs;
+
+#ifdef CONFIG_LIB_SYSCALL
+  /* Current user RSP for syscall */
+
+  uint64_t *ustack;
+
+  /* Userspace virtual address */
+
+  uint64_t *uvbase;
+#endif
+
+#ifdef CONFIG_ARCH_KERNEL_STACK
+  /* Kernel stack pointer.
+   *
+   * We have to track the current kernel stack pointer to handle
+   * syscalls in kernel mode. All registers are occupied when entering
+   * syscall, so we cannot get this value from tcb in syscall handler.
+   * We keep referenve to kernel stack in CPU private data and update it
+   * at each context switch.
+   */
+
+  uint64_t *ktopstk;
+#endif
 };
 
 /****************************************************************************
@@ -83,19 +116,11 @@ extern "C"
  * Name: up_cpu_index
  *
  * Description:
- *   Return an index in the range of 0 through (CONFIG_SMP_NCPUS-1) that
- *   corresponds to the currently executing CPU.
- *
- * Input Parameters:
- *   None
- *
- * Returned Value:
- *   An integer index in the range of 0 through (CONFIG_SMP_NCPUS-1) that
- *   corresponds to the currently executing CPU.
+ *   Return the real core number regardless CONFIG_SMP setting
  *
  ****************************************************************************/
 
-#ifdef CONFIG_SMP
+#ifdef CONFIG_ARCH_HAVE_MULTICPU
 static inline_function int up_cpu_index(void)
 {
   int cpu;
@@ -108,9 +133,7 @@ static inline_function int up_cpu_index(void)
 
   return cpu;
 }
-#else
-#  define up_cpu_index() (0)
-#endif
+#endif /* CONFIG_ARCH_HAVE_MULTICPU */
 
 /****************************************************************************
  * Inline functions
@@ -146,6 +169,13 @@ static inline_function bool up_interrupt_context(void)
 {
   return up_current_regs() != NULL;
 }
+
+/****************************************************************************
+ * Name: up_getusrpc
+ ****************************************************************************/
+
+#define up_getusrpc(regs) \
+    (((uint64_t *)((regs) ? (regs) : up_current_regs()))[REG_RIP])
 
 #undef EXTERN
 #ifdef __cplusplus

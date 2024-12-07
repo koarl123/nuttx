@@ -1,6 +1,8 @@
 /****************************************************************************
  * include/nuttx/sensors/sensor.h
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -270,7 +272,7 @@ struct sensor_ops_s
 
   CODE int (*set_interval)(FAR struct sensor_lowerhalf_s *lower,
                            FAR struct file *filep,
-                           FAR unsigned long *period_us);
+                           FAR uint32_t *period_us);
 
   /**************************************************************************
    * Name: batch
@@ -316,7 +318,7 @@ struct sensor_ops_s
 
   CODE int (*batch)(FAR struct sensor_lowerhalf_s *lower,
                     FAR struct file *filep,
-                    FAR unsigned long *latency_us);
+                    FAR uint32_t *latency_us);
 
   /**************************************************************************
    * Name: fetch
@@ -351,6 +353,36 @@ struct sensor_ops_s
   CODE int (*fetch)(FAR struct sensor_lowerhalf_s *lower,
                     FAR struct file *filep,
                     FAR char *buffer, size_t buflen);
+
+  /**************************************************************************
+   * Name: flush
+   *
+   * When sensor data accumulates in the hardware buffer but does not
+   * reach the watermark, the upper-layer application can immediately push
+   * the fifo data to the upper layer circbuffer through the flush operation.
+   *
+   * The flush operation is an asynchronous operation. The lower half driver
+   * must call push event with data is NULL and len is zero when the flush
+   * action is completed, then upper half driver triggers the POLLPRI event,
+   * and update user state event to tell application the flush complete
+   * event.
+   *
+   * You can call the flush operation at any time. When the sensor is not
+   * activated, flsuh returns -EINVAL. When the sensor does not support fifo,
+   * it immediately returns the POLLPRI event, indicating that the flush
+   * is completed.
+   *
+   * Input Parameters:
+   *   lower      - The instance of lower half sensor driver.
+   *   filep      - The pointer of file, represents each user using sensor.
+   *
+   * Returned Value:
+   *   Zero (OK) on success; a negated errno value on failure.
+   *
+   **************************************************************************/
+
+  CODE int (*flush)(FAR struct sensor_lowerhalf_s *lower,
+                    FAR struct file *filep);
 
   /**************************************************************************
    * Name: selftest
@@ -425,6 +457,28 @@ struct sensor_ops_s
                         unsigned long arg);
 
   /**************************************************************************
+   * Name: get_info
+   *
+   * With this method, the user can obtain information about the current
+   * device. The name and vendor information cannot exceed
+   * SENSOR_INFO_NAME_SIZE.
+   *
+   * Input Parameters:
+   *   lower   - The instance of lower half sensor driver.
+   *   filep   - The pointer of file, represents each user using sensor.
+   *   info    - Device information structure pointer.
+   *
+   * Returned Value:
+   *   Zero (OK) on success; a negated errno value on failure.
+   *   -ENOTTY - The cmd don't support.
+   *
+   **************************************************************************/
+
+  CODE int (*get_info)(FAR struct sensor_lowerhalf_s *lower,
+                       FAR struct file *filep,
+                       FAR struct sensor_device_info_s *info);
+
+  /**************************************************************************
    * Name: control
    *
    * With this method, the user can set some special config for the sensor,
@@ -476,7 +530,7 @@ struct sensor_lowerhalf_s
    * struct sensor_xxx.
    */
 
-  unsigned long nbuffer;
+  uint32_t nbuffer;
 
   /* The uncalibrated use to describe whether the sensor event is
    * uncalibrated. True is uncalibrated data, false is calibrated data,
@@ -506,6 +560,7 @@ struct sensor_lowerhalf_s
        * Returned Value:
        *   The bytes of push is returned when success;
        *   A negated errno value is returned on any failure.
+       *
        **********************************************************************/
 
       sensor_push_event_t push_event;
@@ -522,6 +577,7 @@ struct sensor_lowerhalf_s
        *
        * Input Parameters:
        *   priv   - Upper half driver handle
+       *
        **********************************************************************/
 
       sensor_notify_event_t notify_event;
@@ -535,6 +591,7 @@ struct sensor_lowerhalf_s
  *
  * Input Parameters:
  *   priv   - Upper half driver handle
+ *
  ****************************************************************************/
 
   CODE void (*sensor_lock)(FAR void * priv);
@@ -639,7 +696,7 @@ int sensor_register(FAR struct sensor_lowerhalf_s *dev, int devno);
  ****************************************************************************/
 
 int sensor_custom_register(FAR struct sensor_lowerhalf_s *dev,
-                           FAR const char *path, unsigned long esize);
+                           FAR const char *path, size_t esize);
 
 /****************************************************************************
  * Name: sensor_unregister
@@ -653,6 +710,7 @@ int sensor_custom_register(FAR struct sensor_lowerhalf_s *dev,
  *           instance is bound to the sensor driver and must persists as long
  *           as the driver persists.
  *   devno - The user specifies which device of this type, from 0.
+ *
  ****************************************************************************/
 
 void sensor_unregister(FAR struct sensor_lowerhalf_s *dev, int devno);
@@ -669,6 +727,7 @@ void sensor_unregister(FAR struct sensor_lowerhalf_s *dev, int devno);
  *           instance is bound to the sensor driver and must persists as long
  *           as the driver persists.
  *   path  - The user specifies path of device, ex: /dev/uorb/xxx
+ *
  ****************************************************************************/
 
 void sensor_custom_unregister(FAR struct sensor_lowerhalf_s *dev,
@@ -681,6 +740,7 @@ void sensor_custom_unregister(FAR struct sensor_lowerhalf_s *dev,
  *   This function registers usensor character node "/dev/usensor", so that
  *   application can register user sensor by this node. The node will
  *   manager all user sensor in this character dirver.
+ *
  ****************************************************************************/
 
 #ifdef CONFIG_USENSOR
@@ -700,6 +760,7 @@ int usensor_initialize(void);
  *
  * Returned Value:
  *   The takeover rpmsg lowerhalf returned on success, NULL on failure.
+ *
  ****************************************************************************/
 
 #ifdef CONFIG_SENSORS_RPMSG
@@ -718,6 +779,7 @@ FAR struct sensor_lowerhalf_s *sensor_rpmsg_register(
  *
  * Input Parameters:
  *   lower - The instance of lower half sensor driver.
+ *
  ****************************************************************************/
 
 #ifdef CONFIG_SENSORS_RPMSG
@@ -733,6 +795,7 @@ void sensor_rpmsg_unregister(FAR struct sensor_lowerhalf_s *lower);
  *
  * Returned Value:
  *   OK on success; A negated errno value is returned on any failure.
+ *
  ****************************************************************************/
 
 #ifdef CONFIG_SENSORS_RPMSG

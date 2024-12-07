@@ -339,8 +339,8 @@ int nx_pthread_create(pthread_trampoline_t trampoline, FAR pthread_t *thread,
 
       /* Convert timespec values to system clock ticks */
 
-      clock_time2ticks(&param.sched_ss_repl_period, &repl_ticks);
-      clock_time2ticks(&param.sched_ss_init_budget, &budget_ticks);
+      repl_ticks = clock_time2ticks(&param.sched_ss_repl_period);
+      budget_ticks = clock_time2ticks(&param.sched_ss_init_budget);
 
       /* The replenishment period must be greater than or equal to the
        * budget period.
@@ -442,12 +442,6 @@ int nx_pthread_create(pthread_trampoline_t trampoline, FAR pthread_t *thread,
 #endif
     }
 
-  /* Then activate the task */
-
-  sched_lock();
-
-  nxtask_activate((FAR struct tcb_s *)ptcb);
-
   /* Return the thread information to the caller */
 
   if (thread != NULL)
@@ -455,7 +449,9 @@ int nx_pthread_create(pthread_trampoline_t trampoline, FAR pthread_t *thread,
       *thread = (pthread_t)ptcb->cmn.pid;
     }
 
-  sched_unlock();
+  /* Then activate the task */
+
+  nxtask_activate((FAR struct tcb_s *)ptcb);
 
   return OK;
 

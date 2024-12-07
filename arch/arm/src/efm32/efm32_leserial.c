@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/src/efm32/efm32_leserial.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -809,25 +811,14 @@ void arm_serialinit(void)
  ****************************************************************************/
 
 #ifdef HAVE_LEUART_CONSOLE
-int up_putc(int ch)
+void up_putc(int ch)
 {
   struct efm32_leuart_s *priv = (struct efm32_leuart_s *)CONSOLE_DEV.priv;
   uint32_t ien;
 
   efm32_disableuartint(priv, &ien);
-
-  /* Check for LF */
-
-  if (ch == '\n')
-    {
-      /* Add CR */
-
-      efm32_lowputc('\r');
-    }
-
   efm32_lowputc(ch);
   efm32_restoreuartint(priv, ien);
-  return ch;
 }
 #endif
 
@@ -842,19 +833,9 @@ int up_putc(int ch)
  ****************************************************************************/
 
 #ifdef HAVE_LEUART_CONSOLE
-int up_putc(int ch)
+void up_putc(int ch)
 {
-  /* Check for LF */
-
-  if (ch == '\n')
-    {
-      /* Add CR */
-
-      efm32_lowputc('\r');
-    }
-
   efm32_lowputc(ch);
-  return ch;
 }
 #endif
 

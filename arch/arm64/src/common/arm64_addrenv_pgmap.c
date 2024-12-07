@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm64/src/common/arm64_addrenv_pgmap.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -90,7 +92,9 @@ uintptr_t up_addrenv_find_page(arch_addrenv_t *addrenv, uintptr_t vaddr)
 
   /* Make table walk to find the page */
 
-  for (ptlevel = 1, lnvaddr = pgdir; ptlevel < MMU_PGT_LEVELS; ptlevel++)
+  for (ptlevel = mmu_get_base_pgt_level(), lnvaddr = pgdir;
+       ptlevel < MMU_PGT_LEVEL_MAX;
+       ptlevel++)
     {
       paddr = mmu_pte_to_paddr(mmu_ln_getentry(ptlevel, lnvaddr, vaddr));
       lnvaddr = arm64_pgvaddr(paddr);
@@ -189,6 +193,7 @@ int up_addrenv_kmap_init(void)
   struct arch_addrenv_s *addrenv;
   uintptr_t              next;
   uintptr_t              vaddr;
+  uintptr_t              l0;
   int                    i;
 
   /* Populate the static page tables one by one */
@@ -196,19 +201,20 @@ int up_addrenv_kmap_init(void)
   addrenv = &g_kernel_addrenv;
   next    =  g_kernel_pgt_pbase;
   vaddr   =  CONFIG_ARCH_KMAP_VBASE;
+  l0      =  mmu_get_base_pgt_level();
 
-  for (i = 0; i < ARCH_SPGTS; i++)
+  for (i = l0; i < ARCH_SPGTS; i++)
     {
       /* Connect the static page tables */
 
       uintptr_t lnvaddr = arm64_pgvaddr(next);
       addrenv->spgtables[i] = next;
-      next = mmu_pte_to_paddr(mmu_ln_getentry(i + 1, lnvaddr, vaddr));
+      next = mmu_pte_to_paddr(mmu_ln_getentry(i, lnvaddr, vaddr));
     }
 
   /* Set the page directory root */
 
-  addrenv->ttbr0 = mmu_ttbr_reg(g_kernel_pgt_pbase, 0);
+  addrenv->ttbr0 = mmu_ttbr_reg(addrenv->spgtables[l0], 0);
 
   /* When all is set and done, flush the data caches */
 

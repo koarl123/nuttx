@@ -204,6 +204,7 @@ static const char *g_white_prefix[] =
   "b8",      /* Ref:  include/fixedmath.h */
   "b16",     /* Ref:  include/fixedmath.h */
   "b32",     /* Ref:  include/fixedmath.h */
+  "cJSON",   /* Ref:  apps/wireless/wapi/src */
   "ub8",     /* Ref:  include/fixedmath.h */
   "ub16",    /* Ref:  include/fixedmath.h */
   "ub32",    /* Ref:  include/fixedmath.h */
@@ -227,6 +228,16 @@ static const char *g_white_suffix[] =
 
 static const char *g_white_content_list[] =
 {
+  /* Ref:
+   * nuttx-apps/examples/wamr_module/module_hello.c
+   * nuttx-apps/interpreters/wamr/wamr_custom_init.c
+   *
+   * They are from the WAMR project.
+   */
+
+  "NativeSymbol",
+  "RuntimeInitArgs",
+
   /* Ref:  gnu_unwind_find_exidx.c */
 
   "__EIT_entry",
@@ -294,12 +305,19 @@ static const char *g_white_content_list[] =
    * drivers/segger/note_sysview.c
    */
 
-  "SEGGER_SYSVIEW",
-  "TaskID",
-  "sName",
+  "DataType",
+  "Offset",
   "Prio",
+  "pU32_Value",
+  "RangeMax",
+  "RangeMin",
+  "SEGGER_SYSVIEW",
+  "ScalingFactor",
+  "sName",
+  "sUnit",
   "StackBase",
   "StackSize",
+  "TaskID",
 
   /* Ref:
    * drivers/segger/syslog_rtt.c
@@ -349,6 +367,8 @@ static const char *g_white_content_list[] =
   "__asan_storeN",
   "__asan_loadN_noabort",
   "__asan_storeN_noabort",
+  "__hwasan_loadN_noabort",
+  "__hwasan_storeN_noabort",
 
   /* Ref:
    * tools/jlink-nuttx.c
@@ -622,6 +642,19 @@ static const char *g_white_files[] =
 
   "arm-acle-compat.h",
   "arm_asm.h",
+
+  /* Skip Mixed case
+   * Ref:
+   * libs/libbuiltin/
+   */
+
+  "InstrProfilingPlatform.c",
+
+  /* Skip Mixed case
+   * arch/arm/src/phy62xx/uart.c:1229:13: error: Mixed case identifier found
+   */
+
+  "phy62xx/uart.c",
   NULL
 };
 

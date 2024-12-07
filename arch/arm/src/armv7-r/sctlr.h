@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/src/armv7-r/sctlr.h
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -32,8 +34,9 @@
  * Included Files
  ****************************************************************************/
 
+#include <arch/irq.h>
+
 #include "barriers.h"
-#include "cp15.h"
 
 /****************************************************************************
  * Pre-processor Definitions

@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/x86_64/include/intel64/irq.h
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -346,9 +348,22 @@
 #define HPET0_IRQ    IRQ2
 #define HPET1_IRQ    IRQ8
 
-/* Use IRQ15 for SMP */
+/* NuttX custom interrupts configuration starts from here.
+ * IRQ16-IRQ23 are reserved for GOLDFISH so we start from IRQ24.
+ */
 
-#define SMP_IPI_IRQ  IRQ15
+/* Use IRQ24 IRQ25 for SMP */
+
+#define SMP_IPI_CALL_IRQ   IRQ24
+#define SMP_IPI_SCHED_IRQ  IRQ25
+
+/* Use IRQ32 and above for MSI */
+
+#define IRQ_MSI_START      IRQ32
+
+/* Use IRQ17 for TLB shootdown */
+
+#define SMP_IPI_TLBSHOOTDOWN_IRQ  IRQ17
 
 /* Common register save structure created by up_saveusercontext() and by
  * ISR/IRQ interrupt processing.
@@ -452,6 +467,10 @@
 
 #define XMMAREA_REGS     (25)
 
+/* Aux register used by implementation */
+
+#define REG_AUX          (26 + XMMAREA_REG_OFFSET)
+
 /* NOTE 2: This is not really state data.  Rather, this is just a convenient
  *   way to pass parameters from the interrupt handler to C code.
  */
@@ -469,6 +488,10 @@
 #define XCP_ALIGN_DOWN(a) ((a) & ~XCP_ALIGN_MASK)
 #define XCP_ALIGN_UP(a)   (((a) + XCP_ALIGN_MASK) & ~XCP_ALIGN_MASK)
 
+/* Aux register flags */
+
+#define REG_AUX_FULLCONTEXT (1 << 0) /* Force full context switch */
+
 /****************************************************************************
  * Public Types
  ****************************************************************************/
@@ -482,15 +505,26 @@ enum ioapic_trigger_mode
   TRIGGER_LEVEL_ACTIVE_LOW = (1 << 15) | (1 << 13),
 };
 
+/* This structure represents the return state from a system call */
+
+#ifdef CONFIG_LIB_SYSCALL
+struct xcpt_syscall_s
+{
+  uintptr_t sysreturn;   /* The return address */
+};
+#endif
+
 /* This struct defines the way the registers are stored */
 
 struct xcptcontext
 {
-  /* The following function pointer is non-zero if there are pending signals
-   * to be processed.
+#ifdef CONFIG_BUILD_KERNEL
+  /* This is the saved address to use when returning from a user-space
+   * signal handler.
    */
 
-  void *sigdeliver; /* Actual type is sig_deliver_t */
+  uintptr_t sigreturn;
+#endif
 
   /* These are saved copies of instruction pointer and EFLAGS used during
    * signal processing.
@@ -500,9 +534,35 @@ struct xcptcontext
   uint64_t saved_rflags;
   uint64_t saved_rsp;
 
+#ifdef CONFIG_ARCH_KERNEL_STACK
+  /* For kernel stack enabled we can't use tcb->xcp.regs[REG_RSP] as it may
+   * point to kernel stack if signaled task is waiting now in
+   * up_switch_context()
+   */
+
+  uint64_t saved_ursp;
+#endif
+
   /* Register save area - allocated from stack in up_initial_state() */
 
   uint64_t *regs;
+
+#ifdef CONFIG_ARCH_ADDRENV
+#  ifdef CONFIG_ARCH_KERNEL_STACK
+  /* In this configuration, all syscalls execute from an internal kernel
+   * stack.  Why?  Because when we instantiate and initialize the address
+   * environment of the new user process, we will temporarily lose the
+   * address environment of the old user process, including its stack
+   * contents.  The kernel C logic will crash immediately with no valid
+   * stack in place.
+   */
+
+  uintptr_t *ustkptr;  /* Saved user stack pointer */
+  uintptr_t *kstack;   /* Allocate base of the (aligned) kernel stack */
+  uintptr_t *ktopstk;  /* Top of kernel stack */
+  uintptr_t *kstkptr;  /* Saved kernel stack pointer */
+#  endif
+#endif
 };
 #endif
 
@@ -560,7 +620,7 @@ static inline void set_pcid(uint64_t pcid)
 
 static inline void set_cr3(uint64_t cr3)
 {
-  __asm__ volatile("mov %0, %%cr3" : "=rm"(cr3) : : "memory");
+  __asm__ volatile("mov %0, %%cr3" :: "r"(cr3));
 }
 
 static inline uint64_t get_cr3(void)

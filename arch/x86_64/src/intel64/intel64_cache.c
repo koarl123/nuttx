@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/x86_64/src/intel64/intel64_cache.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -38,6 +40,10 @@
  ****************************************************************************/
 
 /****************************************************************************
+ * Private Functions
+ ****************************************************************************/
+
+/****************************************************************************
  * Name: x86_64_wbindv
  ****************************************************************************/
 
@@ -63,10 +69,6 @@ static inline void x86_64_invd(void)
 {
   __asm__ volatile("invd" : : : "memory");
 }
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Name: x86_64_cache_linesize
@@ -114,6 +116,21 @@ static size_t x86_64_cache_size(int leaf)
           (((ebx >> 12) & 0x3ff) + 1) *
           ((ebx & 0x7ff) + 1) *
           (ecx + 1));
+}
+
+/****************************************************************************
+ * Name: x86_64_is_cache_enabled
+ ****************************************************************************/
+
+static int x86_64_is_cache_enabled(void)
+{
+  unsigned long cr0;
+
+  __asm__ volatile("\t mov %%cr0, %0\n"
+                   : "=r" (cr0)
+                   :: "memory");
+
+  return (cr0 & 0x60000000) == 0;
 }
 
 /****************************************************************************
@@ -358,6 +375,14 @@ size_t up_get_dcache_size(void)
 #ifdef CONFIG_ARCH_DCACHE
 void up_enable_dcache(void)
 {
+  /* Check if the D-Cache is enabled */
+
+  if (x86_64_is_cache_enabled())
+    {
+      return;
+    }
+
+  up_invalidate_dcache_all();
   x86_64_cache_enable();
 }
 #endif /* CONFIG_ARCH_DCACHE */

@@ -1,6 +1,8 @@
 #############################################################################
 # boards/risc-v/esp32c6/common/src/Make.defs
 #
+# SPDX-License-Identifier: Apache-2.0
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.  The
@@ -66,6 +68,10 @@ endif
 
 ifeq ($(CONFIG_CL_MFRC522),y)
   CSRCS += esp_board_mfrc522.c
+endif
+
+ifeq ($(CONFIG_ESP_PCNT),y)
+  CSRCS += esp_board_qencoder.c
 endif
 
 DEPPATH += --dep-path src

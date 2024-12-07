@@ -33,6 +33,7 @@
 #include <stdbool.h>
 #include <sched.h>
 
+#include <nuttx/sched.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/queue.h>
 
@@ -168,7 +169,8 @@ int                nxsig_default_initialize(FAR struct tcb_s *tcb);
 
 int                nxsig_tcbdispatch(FAR struct tcb_s *stcb,
                                      FAR siginfo_t *info);
-int                nxsig_dispatch(pid_t pid, FAR siginfo_t *info);
+int                nxsig_dispatch(pid_t pid, FAR siginfo_t *info,
+                                  bool thread);
 
 /* sig_cleanup.c */
 

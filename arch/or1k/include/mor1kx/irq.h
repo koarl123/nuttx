@@ -1,8 +1,9 @@
 /****************************************************************************
  * arch/or1k/include/mor1kx/irq.h
  *
- *   Copyright (C) 2018 Extent3D. All rights reserved.
- *   Author: Matt Thompson <matt@extent3d.com>
+ * SPDX-License-Identifier: BSD-3-Clause
+ * SPDX-FileCopyrightText: 2018 Extent3D. All rights reserved.
+ * SPDX-FileCopyrightText: Matt Thompson <matt@extent3d.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -169,12 +170,6 @@ struct xcptcontext
   /* Register save area */
 
   uint32_t regs[XCPTCONTEXT_REGS];
-
-  /* The following function pointer is non-zero if there
-   * are pending signals to be processed.
-   */
-
-  void *sigdeliver; /* Actual type is sig_deliver_t */
 
   /* These are saved copies of LR and CPSR used during
    * signal processing.

@@ -1,6 +1,8 @@
 /****************************************************************************
  * drivers/spi/spi_slave_driver.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -138,7 +140,9 @@ static const struct file_operations g_spislavefops =
   NULL,                         /* ioctl */
   NULL,                         /* mmap */
   NULL,                         /* truncate */
-  spi_slave_poll                /* poll */
+  spi_slave_poll,               /* poll */
+  NULL,                         /* readv */
+  NULL                          /* writev */
 #ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
   , spi_slave_unlink            /* unlink */
 #endif
@@ -669,11 +673,11 @@ static size_t spi_slave_getdata(FAR struct spi_slave_dev_s *dev,
  *   synchronization by several words.
  *
  * Input Parameters:
- *   dev  - SPI Slave device interface instance
- *   data - Pointer to the new data that has been shifted in
- *   len  - Length of the new data in units of nbits wide,
- *          nbits being the data width previously provided to the bind()
- *          method.
+ *   dev    - SPI Slave device interface instance
+ *   data   - Pointer to the new data that has been shifted in
+ *   nwords - Length of the new data in units of nbits wide,
+ *            nbits being the data width previously provided to the bind()
+ *            method.
  *
  * Returned Value:
  *   Number of units accepted by the device. In other words,
@@ -688,10 +692,10 @@ static size_t spi_slave_getdata(FAR struct spi_slave_dev_s *dev,
  ****************************************************************************/
 
 static size_t spi_slave_receive(FAR struct spi_slave_dev_s *dev,
-                                FAR const void *data, size_t len)
+                                FAR const void *data, size_t nwords)
 {
   FAR struct spi_slave_driver_s *priv = (FAR struct spi_slave_driver_s *)dev;
-  size_t recv_bytes = MIN(len, sizeof(priv->rx_buffer));
+  size_t recv_bytes = MIN(WORDS2BYTES(nwords), sizeof(priv->rx_buffer));
 
   memcpy(priv->rx_buffer, data, recv_bytes);
 

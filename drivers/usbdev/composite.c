@@ -1,6 +1,8 @@
 /****************************************************************************
  * drivers/usbdev/composite.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -38,7 +40,7 @@
 #include <nuttx/usb/usbdev.h>
 #include <nuttx/usb/usbdev_trace.h>
 
-#ifdef CONFIG_BOARD_USBDEV_SERIALSTR
+#if defined(CONFIG_BOARD_USBDEV_SERIALSTR) || defined(CONFIG_BOARD_USBDEV_PIDVID)
 #  include <nuttx/board.h>
 #endif
 

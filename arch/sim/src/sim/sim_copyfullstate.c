@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/sim/src/sim/sim_copyfullstate.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -41,7 +43,7 @@
  *
  ****************************************************************************/
 
-void sim_copyfullstate(unsigned long *dest, unsigned long *src)
+void sim_copyfullstate(xcpt_reg_t *dest, xcpt_reg_t *src)
 {
   int i;
 

@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/x86_64/src/intel64/intel64_regdump.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -90,7 +92,7 @@ void backtrace(uint64_t rbp)
 
   for (i = 0; i < 16; i++)
     {
-      if ((rbp < 0x200000) || (rbp > 0xffffffff))
+      if ((rbp < 0x200000) || (rbp > 0xfffffffff))
         {
           break;
         }
@@ -154,18 +156,5 @@ void up_dump_register(void *dumpregs)
          regs[REG_R14], regs[REG_R15]);
   _alert("Dumping Stack (+-64 bytes):\n");
 
-  if (regs[REG_RSP] > 0 && regs[REG_RSP] < 0x1000000)
-    {
-      print_mem((void *)regs[REG_RSP] - 512,
-          128 * 0x200000 - regs[REG_RSP] + 512);
-    }
-  else
-    {
-      print_mem((void *)regs[REG_RSP] - 512, 1024);
-    }
-
-#ifdef CONFIG_DEBUG_NOOPT
-  backtrace(regs[REG_RBP]);
-#endif
   _alert("-----------------------------------------\n");
 }

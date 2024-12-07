@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/xtensa/src/common/xtensa.h
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -103,20 +105,9 @@
 #define IDLETHREAD_STACKSIZE  ((CONFIG_IDLETHREAD_STACKSIZE + 15) & ~15)
 #define IDLETHREAD_STACKWORDS (IDLETHREAD_STACKSIZE >> 2)
 
-/* In the Xtensa model, the state is saved in stack,
- * only a reference stored in TCB.
- */
-
-#define xtensa_savestate(regs)    ((regs) = (uint32_t *)CURRENT_REGS)
-#define xtensa_restorestate(regs) (CURRENT_REGS = (regs))
-
 /* Context switching via system calls ***************************************/
 
-#define xtensa_context_restore(regs)\
-  sys_call1(SYS_restore_context, (uintptr_t)regs)
-
-#define xtensa_switchcontext(saveregs, restoreregs)\
-  sys_call2(SYS_switch_context, (uintptr_t)saveregs, (uintptr_t)restoreregs)
+#define xtensa_context_restore() sys_call0(SYS_restore_context)
 
 /* Interrupt codes from other CPUs: */
 
@@ -241,7 +232,7 @@ uint32_t *xtensa_user(int exccause, uint32_t *regs);
 
 #ifdef CONFIG_SMP
 int xtensa_intercpu_interrupt(int tocpu, int intcode);
-void xtensa_pause_handler(void);
+void xtensa_smp_call_handler(int irq, void *context, void *arg);
 #endif
 
 /* Signals */

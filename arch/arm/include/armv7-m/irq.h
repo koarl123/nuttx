@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/include/armv7-m/irq.h
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -41,6 +43,10 @@
 /****************************************************************************
  * Pre-processor Prototypes
  ****************************************************************************/
+
+#ifdef __ghs__
+#  define __ARM_ARCH 7
+#endif
 
 /* Configuration ************************************************************/
 
@@ -212,12 +218,6 @@ struct xcpt_syscall_s
 
 struct xcptcontext
 {
-  /* The following function pointer is non-zero if there
-   * are pending signals to be processed.
-   */
-
-  void *sigdeliver; /* Actual type is sig_deliver_t */
-
   /* These are saved copies of the context used during
    * signal processing.
    */
@@ -251,13 +251,14 @@ struct xcptcontext
 
   uint32_t *regs;
 };
-#endif
+
+/****************************************************************************
+ * Public Data
+ ****************************************************************************/
 
 /****************************************************************************
  * Inline functions
  ****************************************************************************/
-
-#ifndef __ASSEMBLY__
 
 /* Name: up_irq_save, up_irq_restore, and friends.
  *
@@ -433,7 +434,7 @@ static inline void up_irq_enable(void)
 {
   /* In this case, we are always retaining or lowering the priority value */
 
-  setbasepri(NVIC_SYSH_PRIORITY_MIN);
+  setbasepri(0);
   __asm__ __volatile__ ("\tcpsie  i\n");
 }
 
@@ -540,23 +541,13 @@ static inline void setcontrol(uint32_t control)
  * Name: up_cpu_index
  *
  * Description:
- *   Return an index in the range of 0 through (CONFIG_SMP_NCPUS-1) that
- *   corresponds to the currently executing CPU.
- *
- * Input Parameters:
- *   None
- *
- * Returned Value:
- *   An integer index in the range of 0 through (CONFIG_SMP_NCPUS-1) that
- *   corresponds to the currently executing CPU.
+ *   Return the real core number regardless CONFIG_SMP setting
  *
  ****************************************************************************/
 
-#ifdef CONFIG_SMP
+#ifdef CONFIG_ARCH_HAVE_MULTICPU
 int up_cpu_index(void) noinstrument_function;
-#else
-#  define up_cpu_index() 0
-#endif /* CONFIG_SMP */
+#endif /* CONFIG_ARCH_HAVE_MULTICPU */
 
 static inline_function uint32_t up_getsp(void)
 {
@@ -571,17 +562,16 @@ static inline_function uint32_t up_getsp(void)
   return sp;
 }
 
-#endif /* __ASSEMBLY__ */
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
+noinstrument_function
+static inline_function bool up_interrupt_context(void)
+{
+  return getipsr() != 0;
+}
 
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
-#ifndef __ASSEMBLY__
 #ifdef __cplusplus
 #define EXTERN extern "C"
 extern "C"
@@ -594,6 +584,6 @@ extern "C"
 #ifdef __cplusplus
 }
 #endif
-#endif
+#endif /* __ASSEMBLY__ */
 
 #endif /* __ARCH_ARM_INCLUDE_ARMV7_M_IRQ_H */

@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/src/cxd56xx/cxd56_irq.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -470,7 +472,7 @@ void up_enable_irq(int irq)
 
       /* EXTINT needs to be handled on CPU0 to avoid deadlock */
 
-      if (irq > CXD56_IRQ_EXTINT && irq != CXD56_IRQ_SW_INT && 0 != cpu)
+      if (irq > CXD56_IRQ_EXTINT && irq != CXD56_IRQ_SMP_CALL && 0 != cpu)
         {
           up_send_irqreq(0, irq, 0);
           return;

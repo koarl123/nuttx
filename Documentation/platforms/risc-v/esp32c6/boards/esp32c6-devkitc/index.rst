@@ -194,6 +194,16 @@ To test it, just execute the ``pwm`` application::
     pwm_main: starting output with frequency: 10000 duty: 00008000
     pwm_main: stopping output
 
+qencoder
+---
+
+This configuration demostrates the use of Quadrature Encoder connected to pins
+GPIO10 and GPIO11. You can start measurement of pulses using the following
+command (by default, it will open ``\dev\qe0`` device and print 20 samples
+using 1 second delay)::
+
+    nsh> qe
+
 rmt
 ---
 
@@ -249,6 +259,10 @@ by default to each other and running the ``spi`` example::
     nsh> spi exch -b 2 "AB"
     Sending:	AB
     Received:	AB
+
+If SPI peripherals are already in use you can also use bitbang driver which is a
+software implemented SPI peripheral by enabling `CONFIG_ESPRESSIF_SPI_BITBANG`
+option.
 
 spiflash
 --------
